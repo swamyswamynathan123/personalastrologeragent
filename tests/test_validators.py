@@ -100,6 +100,12 @@ def test_birth_time_unknown():
     assert ok is False
 
 
+def test_birth_time_midnight_word_is_valid():
+    # "midnight" contains "night" as a substring, but whole-word matching must not reject it
+    ok, msg = validate_birth_time("midnight")
+    assert ok is True
+
+
 # --- validate_current_datetime ---
 
 def test_valid_current_datetime_with_offset():
@@ -120,6 +126,19 @@ def test_invalid_current_datetime_empty():
 def test_invalid_current_datetime_bad_format():
     ok, msg = validate_current_datetime("May 15 2026")
     assert ok is False
+
+
+def test_naive_datetime_rejected():
+    # Datetime without timezone info must be rejected
+    ok, msg = validate_current_datetime("2026-05-15T14:30:00")
+    assert ok is False
+    assert "timezone" in msg.lower()
+
+
+def test_dob_non_string_rejected():
+    ok, msg = validate_dob_format(19900515)
+    assert ok is False
+    assert "string" in msg.lower()
 
 
 # --- validate_all ---
