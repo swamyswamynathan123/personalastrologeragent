@@ -1,7 +1,7 @@
 from typing import TypedDict, Optional, List, Dict, Any
 
 
-class AstrologerState(TypedDict):
+class AstrologerState(TypedDict, total=False):
     # --- Raw inputs (from Streamlit payload) ---
     full_name: Optional[str]
     dob: Optional[str]                      # expected YYYY-MM-DD
