@@ -115,7 +115,7 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_progressions, compute_progressed_aspects,
             compute_aspect_patterns, compute_profection,
             compute_solar_arcs, compute_solar_arc_aspects,
-            compute_solar_return,
+            compute_solar_return, compute_firdaria,
         )
 
         birth_dt = datetime.fromisoformat(state["parsed_birth_datetime"])
@@ -217,6 +217,17 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["profection"] = None
+
+        try:
+            current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+            is_day = (chart.get("sect") or {}).get("chart_type") == "day"
+            chart["firdaria"] = compute_firdaria(
+                birth_year=birth_dt.year, birth_month=birth_dt.month, birth_day=birth_dt.day,
+                current_year=current_dt.year, current_month=current_dt.month, current_day=current_dt.day,
+                is_day_chart=is_day,
+            )
+        except Exception:
+            chart["firdaria"] = None
 
         return {"chart_data": chart}
     except Exception:

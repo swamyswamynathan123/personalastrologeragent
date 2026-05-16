@@ -77,6 +77,21 @@ _HOUSE_NUMBER: dict[str, int] = {
     "Ninth_House": 9, "Tenth_House": 10, "Eleventh_House": 11, "Twelfth_House": 12,
 }
 
+# Firdaria time lords: major period sequences and durations (in years)
+_FIRDARIA_DAY = [
+    ("sun",        10), ("venus",       8), ("mercury",    13),
+    ("moon",        9), ("saturn",      11), ("jupiter",    12),
+    ("mars",        7), ("north_node",   3), ("south_node",  2),
+]  # total 75 years
+_FIRDARIA_NIGHT = [
+    ("moon",        9), ("saturn",      11), ("jupiter",    12),
+    ("mars",        7), ("sun",         10), ("venus",       8),
+    ("mercury",    13), ("north_node",   3), ("south_node",  2),
+]  # total 75 years
+# Sub-lord sequences: 7 classical planets in Firdaria order (no nodes)
+_FIRDARIA_SUB_DAY   = ["sun",  "venus",   "mercury", "moon", "saturn", "jupiter", "mars"]
+_FIRDARIA_SUB_NIGHT = ["moon", "saturn",  "jupiter", "mars", "sun",    "venus",   "mercury"]
+
 # Sect: classical day/night planet groupings
 _SECT_DIURNAL = {"sun", "jupiter", "saturn"}     # day sect planets
 _SECT_NOCTURNAL = {"moon", "venus", "mars"}       # night sect planets
@@ -533,6 +548,72 @@ def compute_sect(chart: dict) -> dict:
         planets_sect[planet] = {"sect": sect, "in_sect": in_sect, "role": role}
 
     return {"chart_type": "day" if is_day else "night", "planets": planets_sect}
+
+
+def compute_firdaria(
+    birth_year: int, birth_month: int, birth_day: int,
+    current_year: int, current_month: int, current_day: int,
+    is_day_chart: bool,
+) -> dict:
+    """Return the current Firdaria major and sub period for the given birth/current dates."""
+    from datetime import date, timedelta
+
+    birth_date = date(birth_year, birth_month, birth_day)
+    current_date = date(current_year, current_month, current_day)
+
+    sequence = _FIRDARIA_DAY if is_day_chart else _FIRDARIA_NIGHT
+    sub_seq_base = _FIRDARIA_SUB_DAY if is_day_chart else _FIRDARIA_SUB_NIGHT
+
+    # Walk through repeating 75-year cycles until current_date is bracketed
+    major_lord = major_start = major_end = None
+    major_years = 0
+    cursor = birth_date
+
+    for _ in range(10):  # 10 cycles × 75 years = 750 years, more than enough
+        for planet, years in sequence:
+            days = round(years * 365.25)
+            period_end = cursor + timedelta(days=days)
+            if cursor <= current_date < period_end:
+                major_lord, major_start, major_end, major_years = planet, cursor, period_end, years
+                break
+            cursor = period_end
+        if major_lord:
+            break
+
+    if not major_lord:
+        return {}
+
+    # Sub-periods: nodes have no sub-lords
+    sub_lord = sub_start = sub_end = None
+    years_remaining_sub = None
+
+    if major_lord not in ("north_node", "south_node"):
+        try:
+            idx = sub_seq_base.index(major_lord)
+        except ValueError:
+            idx = 0
+        sub_sequence = sub_seq_base[idx:] + sub_seq_base[:idx]
+        sub_days = (major_years * 365.25) / 7
+        sub_cursor = major_start
+        for sub_planet in sub_sequence:
+            sub_end_dt = sub_cursor + timedelta(days=round(sub_days))
+            if sub_cursor <= current_date < sub_end_dt:
+                sub_lord, sub_start, sub_end = sub_planet, sub_cursor, sub_end_dt
+                years_remaining_sub = round((sub_end - current_date).days / 365.25, 1)
+                break
+            sub_cursor = sub_end_dt
+
+    return {
+        "major_lord": major_lord,
+        "major_period_start": major_start.isoformat(),
+        "major_period_end": major_end.isoformat(),
+        "major_period_years": major_years,
+        "years_remaining_major": round((major_end - current_date).days / 365.25, 1),
+        "sub_lord": sub_lord,
+        "sub_period_start": sub_start.isoformat() if sub_start else None,
+        "sub_period_end": sub_end.isoformat() if sub_end else None,
+        "years_remaining_sub": years_remaining_sub,
+    }
 
 
 def compute_fixed_star_conjunctions(chart: dict, orb: float = 1.0) -> list[dict]:

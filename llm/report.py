@@ -287,6 +287,41 @@ def _format_aspect_patterns(patterns: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_firdaria(firdaria: dict | None, chart: dict | None = None) -> str:
+    if not firdaria:
+        return "Firdaria unavailable."
+    major = (firdaria.get("major_lord") or "unknown").replace("_", " ").title()
+    major_end = (firdaria.get("major_period_end") or "")[:10]
+    major_rem = firdaria.get("years_remaining_major", "?")
+    major_yrs = firdaria.get("major_period_years", "?")
+
+    lines = [f"- Major period: {major} Firdaria ({major_yrs}-year period, ends {major_end}, {major_rem} yrs remaining)"]
+
+    if chart:
+        lord_data = chart.get((firdaria.get("major_lord") or "").lower())
+        if lord_data:
+            retro = " (retrograde)" if lord_data.get("retrograde") else ""
+            house = f", House {lord_data['house']}" if lord_data.get("house") else ""
+            dignity = f" [{lord_data['dignity']}]" if lord_data.get("dignity") else ""
+            lines.append(f"  Natal condition: {major} in {lord_data.get('sign')} {lord_data.get('position')}°{retro}{house}{dignity}")
+
+    sub = firdaria.get("sub_lord")
+    if sub:
+        sub_label = sub.replace("_", " ").title()
+        sub_end = (firdaria.get("sub_period_end") or "")[:10]
+        sub_rem = firdaria.get("years_remaining_sub", "?")
+        lines.append(f"- Sub-period: {sub_label} sub-lord (ends {sub_end}, {sub_rem} yrs remaining)")
+        if chart:
+            sub_data = chart.get(sub)
+            if sub_data:
+                retro = " (retrograde)" if sub_data.get("retrograde") else ""
+                house = f", House {sub_data['house']}" if sub_data.get("house") else ""
+                dignity = f" [{sub_data['dignity']}]" if sub_data.get("dignity") else ""
+                lines.append(f"  Natal condition: {sub_label} in {sub_data.get('sign')} {sub_data.get('position')}°{retro}{house}{dignity}")
+
+    return "\n".join(lines)
+
+
 def _format_profection(profection: dict | None) -> str:
     if not profection:
         return "Annual profection unavailable."
@@ -381,6 +416,7 @@ def build_prompt(state: "AstrologerState") -> str:
         solar_arcs_section = "## Solar Arc Directions\n" + _format_solar_arcs(chart.get("solar_arcs") or {})
         solar_arc_aspects_section = "## Solar Arc Aspects to Natal Chart\n" + _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
         profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
+        firdaria_section = "## Firdaria Time Lords\n" + _format_firdaria(chart.get("firdaria"), chart)
         solar_return_section = "## Solar Return Chart\n" + _format_solar_return(chart.get("solar_return") or {})
         chart_section = "\n\n".join([
             placements, anaretic_section, fixed_stars_section, ruler_section, balance_section, sect_section,
@@ -389,7 +425,7 @@ def build_prompt(state: "AstrologerState") -> str:
             aspects_section, patterns_section, transits_section,
             progressions_section, prog_aspects_section,
             solar_arcs_section, solar_arc_aspects_section,
-            profection_section, solar_return_section,
+            profection_section, firdaria_section, solar_return_section,
         ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
@@ -430,6 +466,7 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Solar return chart: the SR Ascendant and any angular planets are the dominant themes for the 12-month period from the return date; integrate the SR with the profection for a complete annual picture
 - Anaretic degree (29°): a planet or angle at 29° carries life-level urgency — a chronic drive to resolve unfinished business in that sign's themes before moving on; if the chart ruler, a luminary, or the Ascendant is anaretic, this urgency colors the entire chart and should be named in the overview
 - Planetary sect: day charts (Sun in houses 7–12) favor Sun, Jupiter, Saturn; night charts favor Moon, Venus, Mars. Out-of-sect malefics (Saturn in a night chart, Mars in a day chart) are the most destabilizing planets — their difficulties are less predictable and harder to channel; name this explicitly. Out-of-sect benefics give gifts but require intentional effort to access. In-sect malefics are still difficult but more structured and purposeful.
+- Firdaria: the major lord's natal condition (sign, house, dignity, retrograde status) determines the biographical chapter's quality and difficulty. The sub-lord adds a texture layer within the major period. If the Firdaria major lord = profection lord of the year, that planet is doubly activated and should be flagged as the single most important planet right now. A retrograde or debilitated Firdaria lord = a challenging multi-year chapter requiring inner work.
 - Fixed stars: only exact conjunctions (1° orb) matter — no other aspects. The 4 Royal Stars (Aldebaran, Regulus, Antares, Fomalhaut) conjunct a luminary or angle are life-defining signatures; Algol conjunct any personal planet or the Ascendant is the chart's most intense pressure point and must be named. Spica, Sirius, Vega near the Sun/Moon/Ascendant indicate distinctive gifts. Weave fixed stars into interpretation naturally — do not list them mechanically.
 
 ## Synthesis Protocol — Complete Mentally Before Writing
@@ -453,7 +490,7 @@ North Node (sign + house) = the unfamiliar direction this soul is stretching tow
 Progressed Sun sign/house = the psychological chapter; what is being developed and released. Progressed Moon = the emotional climate in force for ~2.5 years. Name any progressed sign change within ±2 years and the approximate year it perfects. Highlight applying progressed aspects within 0.5° as what is crystallizing right now.
 
 **4. Current Cosmic Climate**
-Open with the profection year: which house/theme is activated, what the lord of the year is doing natally, and if it is being hit by a current transit or solar arc. Then present transits in priority order (outer planets to angles/luminaries first). For each significant transit, name: natal planet hit, house it rules, what area of life is activated, and approximate duration. Distinguish solar arc events ("a milestone arriving") from transiting weather ("a seasonal pressure"). If 3+ layers converge on one theme, say so directly.
+Open with the two time lord layers together: the Firdaria major/sub period (the biographical arc — years to decades) and the profection year (the annual focus). State what each lord is doing natally. If they are the same planet, say so explicitly — this is the chart's most activated planet right now. Then present transits in priority order (outer planets to angles/luminaries first). For each significant transit, name: natal planet hit, house it rules, what area of life is activated, and approximate duration. Distinguish solar arc events ("a milestone arriving") from transiting weather ("a seasonal pressure"). If 3+ layers converge on one theme, say so directly.
 
 **5. Key Life Themes** (exactly 3–4 themes)
 Each theme must be supported by at least 2 independent chart factors. Draw from aspect patterns, natal dignity extremes, stelliums, mutual receptions, nodal axis, anaretic degrees, sect status, and fixed star conjunctions. A Royal Star on a luminary or angle, or Algol on a personal planet, is almost always a standalone life theme. The out-of-sect malefic, if present, almost always generates a permanent life theme. Name tensions honestly — if the chart shows a creative gift in friction with a structuring challenge, say what that dynamic produces and how to work with it.
@@ -490,6 +527,7 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         prog_aspects_text = _format_progressed_aspects(chart.get("progressed_aspects") or [])
         patterns_text = _format_aspect_patterns(chart.get("aspect_patterns") or [])
         profection_text = _format_profection(chart.get("profection"))
+        firdaria_text = _format_firdaria(chart.get("firdaria"), chart)
         solar_arcs_text = _format_solar_arcs(chart.get("solar_arcs") or {})
         solar_arc_aspects_text = _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
         solar_return_text = _format_solar_return(chart.get("solar_return") or {})
@@ -518,6 +556,7 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
             f"\n\nSolar Arc Directions:\n{solar_arcs_text}"
             f"\n\nSolar Arc Aspects to Natal:\n{solar_arc_aspects_text}"
             f"\n\nAnnual Profection:\n{profection_text}"
+            f"\n\nFirdaria Time Lords:\n{firdaria_text}"
             f"\n\nSolar Return Chart:\n{solar_return_text}"
         )
     else:
