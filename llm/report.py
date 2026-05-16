@@ -31,7 +31,8 @@ def _format_planet(label: str, data: dict | None) -> str:
         return f"- {label}: data unavailable"
     retro = " (retrograde)" if data.get("retrograde") else ""
     house = f", House {data['house']}" if data.get("house") else ""
-    return f"- {label}: {data['sign']} {data['position']}°{retro}{house}"
+    dignity = f" [{data['dignity']}]" if data.get("dignity") else ""
+    return f"- {label}: {data['sign']} {data['position']}°{retro}{house}{dignity}"
 
 
 def _format_aspects(aspects: list[dict]) -> str:
@@ -74,6 +75,29 @@ def _format_nodes(chart: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_balance(balance: dict) -> str:
+    if not balance:
+        return "Balance data unavailable."
+    elements = balance.get("elements", {})
+    modalities = balance.get("modalities", {})
+    el_str = " | ".join(f"{k} {v}" for k, v in elements.items())
+    mod_str = " | ".join(f"{k} {v}" for k, v in modalities.items())
+    return f"- Elements: {el_str}\n- Modalities: {mod_str}"
+
+
+def _format_chart_ruler(chart_ruler: dict | None) -> str:
+    if not chart_ruler:
+        return "Chart ruler unavailable (Ascendant data missing)."
+    planet = chart_ruler["planet"].capitalize()
+    asc_sign = chart_ruler.get("asc_sign", "")
+    sign = chart_ruler.get("sign", "unknown")
+    pos = chart_ruler.get("position", 0)
+    house = f", House {chart_ruler['house']}" if chart_ruler.get("house") else ""
+    retro = " (retrograde)" if chart_ruler.get("retrograde") else ""
+    dignity = f" [{chart_ruler['dignity']}]" if chart_ruler.get("dignity") else ""
+    return f"- {asc_sign} Ascendant → ruled by {planet} in {sign} {pos}°{retro}{house}{dignity}"
+
+
 def _format_houses(houses: dict) -> str:
     if not houses:
         return "House cusp data unavailable."
@@ -109,11 +133,13 @@ def build_prompt(state: "AstrologerState") -> str:
             _format_planet("Neptune", chart.get("neptune")),
             _format_planet("Pluto", chart.get("pluto")),
         ])
+        ruler_section = "## Chart Ruler\n" + _format_chart_ruler(chart.get("chart_ruler"))
+        balance_section = "## Elemental & Modal Balance\n" + _format_balance(chart.get("balance") or {})
         nodes_section = "## Lunar Nodes\n" + _format_nodes(chart)
         houses_section = "## House Cusps\n" + _format_houses(chart.get("houses") or {})
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
-        chart_section = "\n\n".join([placements, nodes_section, houses_section, aspects_section, transits_section])
+        chart_section = "\n\n".join([placements, ruler_section, balance_section, nodes_section, houses_section, aspects_section, transits_section])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
 
@@ -123,7 +149,9 @@ def build_prompt(state: "AstrologerState") -> str:
 
 Generate a comprehensive, personalized astrological reading for the person below.
 Only use the chart data provided — do NOT invent placements, transits, or aspects not listed here.
+Dignity levels: domicile (strongest) > exaltation (strong) > no dignity (neutral) > detriment (weakened) > fall (most challenged).
 For aspects: applying aspects (planets still moving toward exact) are currently intensifying; separating aspects are past their peak and more ingrained.
+Use the elemental and modal balance to characterise overall temperament before interpreting individual placements.
 
 ## Person Details
 - **Full Name:** {state['full_name']}
@@ -166,10 +194,12 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
             f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
         ])
         nodes_text = _format_nodes(chart)
+        ruler_text = _format_chart_ruler(chart.get("chart_ruler"))
         aspects_text = _format_aspects(chart.get("aspects") or [])
         transits_text = _format_transits(chart.get("transits") or [])
         chart_summary = (
-            f"{placements}\n\nLunar Nodes:\n{nodes_text}"
+            f"{placements}\n\nChart Ruler:\n{ruler_text}"
+            f"\n\nLunar Nodes:\n{nodes_text}"
             f"\n\nNatal Aspects:\n{aspects_text}"
             f"\n\nCurrent Transits:\n{transits_text}"
         )

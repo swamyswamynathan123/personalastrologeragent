@@ -14,12 +14,11 @@ _MAJOR_ASPECTS = [
 
 _TRANSIT_ORB = 3.0
 
-# Average daily motion in degrees (direct). Retrograde flag flips the sign.
 _PLANET_SPEEDS = {
     "moon": 13.2, "mercury": 1.38, "venus": 1.2, "sun": 0.985,
     "mars": 0.524, "jupiter": 0.083, "saturn": 0.034,
     "uranus": 0.012, "neptune": 0.006, "pluto": 0.004,
-    "north_node": 0.053,  # mean node moves mostly retrograde; retrograde flag handles direction
+    "north_node": 0.053,
     "ascendant": 0.0, "midheaven": 0.0,
 }
 
@@ -33,6 +32,41 @@ _HOUSE_ATTRS = [
     "fifth_house", "sixth_house", "seventh_house", "eighth_house",
     "ninth_house", "tenth_house", "eleventh_house", "twelfth_house",
 ]
+
+# Essential dignities: domicile checked first (strongest), then exaltation, detriment, fall.
+# Outer planets use modern rulerships for domicile/detriment; exaltation/fall omitted where debated.
+_DIGNITIES: dict[str, dict[str, list[str]]] = {
+    "sun":     {"domicile": ["Leo"],                    "exaltation": ["Aries"],     "detriment": ["Aquarius"],             "fall": ["Libra"]},
+    "moon":    {"domicile": ["Cancer"],                 "exaltation": ["Taurus"],    "detriment": ["Capricorn"],            "fall": ["Scorpio"]},
+    "mercury": {"domicile": ["Gemini", "Virgo"],        "exaltation": [],            "detriment": ["Sagittarius", "Pisces"],"fall": []},
+    "venus":   {"domicile": ["Taurus", "Libra"],        "exaltation": ["Pisces"],    "detriment": ["Aries", "Scorpio"],     "fall": ["Virgo"]},
+    "mars":    {"domicile": ["Aries", "Scorpio"],       "exaltation": ["Capricorn"], "detriment": ["Libra", "Taurus"],      "fall": ["Cancer"]},
+    "jupiter": {"domicile": ["Sagittarius", "Pisces"],  "exaltation": ["Cancer"],    "detriment": ["Gemini", "Virgo"],      "fall": ["Capricorn"]},
+    "saturn":  {"domicile": ["Capricorn", "Aquarius"],  "exaltation": ["Libra"],     "detriment": ["Cancer", "Leo"],        "fall": ["Aries"]},
+    "uranus":  {"domicile": ["Aquarius"],               "exaltation": [],            "detriment": ["Leo"],                  "fall": []},
+    "neptune": {"domicile": ["Pisces"],                 "exaltation": [],            "detriment": ["Virgo"],                "fall": []},
+    "pluto":   {"domicile": ["Scorpio"],                "exaltation": [],            "detriment": ["Taurus"],               "fall": []},
+}
+
+# Modern sign rulers (used for chart ruler and house ruler lookups)
+_SIGN_RULER: dict[str, str] = {
+    "Aries": "mars", "Taurus": "venus", "Gemini": "mercury", "Cancer": "moon",
+    "Leo": "sun", "Virgo": "mercury", "Libra": "venus", "Scorpio": "pluto",
+    "Sagittarius": "jupiter", "Capricorn": "saturn", "Aquarius": "uranus", "Pisces": "neptune",
+}
+
+_SIGN_ELEMENT: dict[str, str] = {
+    "Aries": "Fire", "Leo": "Fire", "Sagittarius": "Fire",
+    "Taurus": "Earth", "Virgo": "Earth", "Capricorn": "Earth",
+    "Gemini": "Air", "Libra": "Air", "Aquarius": "Air",
+    "Cancer": "Water", "Scorpio": "Water", "Pisces": "Water",
+}
+
+_SIGN_MODALITY: dict[str, str] = {
+    "Aries": "Cardinal", "Cancer": "Cardinal", "Libra": "Cardinal", "Capricorn": "Cardinal",
+    "Taurus": "Fixed", "Leo": "Fixed", "Scorpio": "Fixed", "Aquarius": "Fixed",
+    "Gemini": "Mutable", "Virgo": "Mutable", "Sagittarius": "Mutable", "Pisces": "Mutable",
+}
 
 
 def _safe_planet(subject: AstrologicalSubject, attr: str) -> Optional[dict]:
@@ -63,6 +97,16 @@ def _sign_from_abs_pos(abs_pos: float) -> tuple[str, float]:
     return _SIGNS[idx], round(abs_pos % 30, 2)
 
 
+def _get_dignity(planet: str, sign: str) -> Optional[str]:
+    d = _DIGNITIES.get(planet)
+    if not d:
+        return None
+    for level in ("domicile", "exaltation", "detriment", "fall"):
+        if sign in d[level]:
+            return level
+    return None
+
+
 def _angular_diff(pos1: float, pos2: float) -> float:
     diff = abs(pos1 - pos2) % 360
     return min(diff, 360 - diff)
@@ -82,17 +126,14 @@ def _is_applying(
     p2_name: str, p2_abs: float, p2_retro: bool,
     aspect_angle: float,
 ) -> bool:
-    """True if the two bodies are moving toward the exact aspect angle."""
     s1 = _PLANET_SPEEDS.get(p1_name, 0) * (-1 if p1_retro else 1)
     s2 = _PLANET_SPEEDS.get(p2_name, 0) * (-1 if p2_retro else 1)
-    rel = s1 - s2  # net motion of p1 relative to p2 per day
+    rel = s1 - s2
 
-    # Signed gap: how far ahead p1 is of p2, in [-180, 180]
     gap = (p1_abs - p2_abs) % 360
     if gap > 180:
         gap -= 360
 
-    # Nearest exact aspect position
     if aspect_angle == 0:
         exact = 0.0
     elif aspect_angle == 180:
@@ -100,15 +141,53 @@ def _is_applying(
     else:
         exact = aspect_angle if abs(gap - aspect_angle) <= abs(gap + aspect_angle) else -aspect_angle
 
-    deviation = gap - exact  # how far the current gap is from exact
+    deviation = gap - exact
     if rel == 0 or deviation == 0:
         return False
-    # Applying when deviation and rel have opposite signs (gap moving toward exact)
     return (deviation > 0) != (rel > 0)
 
 
+def compute_balance(chart: dict) -> dict:
+    """Count planetary distribution across elements and modalities."""
+    elements: dict[str, int] = {"Fire": 0, "Earth": 0, "Air": 0, "Water": 0}
+    modalities: dict[str, int] = {"Cardinal": 0, "Fixed": 0, "Mutable": 0}
+    for planet in _PLANETS:
+        data = chart.get(planet)
+        if data and data.get("sign"):
+            sign = data["sign"]
+            el = _SIGN_ELEMENT.get(sign)
+            mod = _SIGN_MODALITY.get(sign)
+            if el:
+                elements[el] += 1
+            if mod:
+                modalities[mod] += 1
+    return {"elements": elements, "modalities": modalities}
+
+
+def compute_chart_ruler(chart: dict) -> Optional[dict]:
+    """Return data on the planet ruling the Ascendant sign (the chart ruler)."""
+    asc = chart.get("ascendant")
+    if not asc or not asc.get("sign"):
+        return None
+    asc_sign = asc["sign"]
+    ruler_key = _SIGN_RULER.get(asc_sign)
+    if not ruler_key:
+        return None
+    ruler_data = chart.get(ruler_key)
+    if not ruler_data:
+        return None
+    return {
+        "planet": ruler_key,
+        "asc_sign": asc_sign,
+        "sign": ruler_data.get("sign"),
+        "position": ruler_data.get("position"),
+        "house": ruler_data.get("house"),
+        "retrograde": ruler_data.get("retrograde", False),
+        "dignity": ruler_data.get("dignity"),
+    }
+
+
 def compute_aspects(chart: dict) -> list[dict]:
-    """Compute natal aspects between all planet pairs, Ascendant, Midheaven, and North Node."""
     bodies: dict[str, tuple[float, bool]] = {}
     for planet in _PLANETS:
         data = chart.get(planet)
@@ -143,7 +222,6 @@ def compute_transits(
     year: int, month: int, day: int, hour: int, minute: int,
     city: str, nation: str, tz_str: str,
 ) -> list[dict]:
-    """Compute aspects between today's transiting planets and the natal chart."""
     subject = AstrologicalSubject(
         name="Transit",
         year=year, month=month, day=day, hour=hour, minute=minute,
@@ -184,7 +262,6 @@ def compute_chart(
     birth_hour: int, birth_minute: int,
     city: str, nation: str, tz_str: str,
 ) -> dict:
-    """Return a plain dict of natal chart placements using kerykeion."""
     subject = AstrologicalSubject(
         name=full_name,
         year=birth_year, month=birth_month, day=birth_day,
@@ -194,7 +271,7 @@ def compute_chart(
 
     chart = {planet: _safe_planet(subject, planet) for planet in _PLANETS}
 
-    # Ascendant and Midheaven (include abs_pos for aspect computation)
+    # Ascendant and Midheaven
     first = getattr(subject, "first_house", None)
     tenth = getattr(subject, "tenth_house", None)
     chart["ascendant"] = {
@@ -208,7 +285,7 @@ def compute_chart(
         "abs_pos": round(getattr(tenth, "abs_pos", 0.0), 2),
     } if tenth else None
 
-    # North Node (mean node) and computed South Node
+    # North Node and computed South Node
     north_node = _safe_planet(subject, "mean_node")
     chart["north_node"] = north_node
     if north_node and north_node.get("abs_pos") is not None:
@@ -222,5 +299,17 @@ def compute_chart(
     chart["houses"] = {}
     for i, attr in enumerate(_HOUSE_ATTRS, 1):
         chart["houses"][str(i)] = _safe_house(subject, attr)
+
+    # Essential dignities — added directly onto each planet dict
+    for planet_name in _PLANETS:
+        data = chart.get(planet_name)
+        if data and data.get("sign"):
+            dignity = _get_dignity(planet_name, data["sign"])
+            if dignity:
+                data["dignity"] = dignity
+
+    # Elemental / modal balance and chart ruler (computed after dignities)
+    chart["balance"] = compute_balance(chart)
+    chart["chart_ruler"] = compute_chart_ruler(chart)
 
     return chart
