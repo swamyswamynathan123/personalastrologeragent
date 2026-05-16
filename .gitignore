@@ -354,6 +354,12 @@ paket-files/
 **/__pycache__/
 *.pyc
 
+# Virtual environment
+venv/
+
+# Kerykeion geocoding cache
+cache/
+
 # Cake - Uncomment if you are using it
 #tools/**
 #!tools/packages.config

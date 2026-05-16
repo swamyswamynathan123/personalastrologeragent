@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-import anthropic
+import openai
 from dotenv import load_dotenv
 
 if TYPE_CHECKING:
@@ -77,16 +77,21 @@ Tone: warm, empowering, specific to this individual. Do not make vague generaliz
 
 
 def generate_report(state: "AstrologerState") -> str:
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
+    response = client.chat.completions.create(
+        model="gpt-4o",
         max_tokens=2048,
-        system=(
-            "You are an expert Western astrologer with deep knowledge of natal charts, "
-            "transits, progressions, and psychological astrology. Be specific, insightful, and kind."
-        ),
-        messages=[{"role": "user", "content": build_prompt(state)}],
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert Western astrologer with deep knowledge of natal charts, "
+                    "transits, progressions, and psychological astrology. Be specific, insightful, and kind."
+                ),
+            },
+            {"role": "user", "content": build_prompt(state)},
+        ],
     )
 
-    return response.content[0].text
+    return response.choices[0].message.content
