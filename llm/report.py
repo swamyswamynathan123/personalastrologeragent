@@ -85,6 +85,45 @@ def _format_balance(balance: dict) -> str:
     return f"- Elements: {el_str}\n- Modalities: {mod_str}"
 
 
+def _format_anaretic_degrees(anaretic: list[dict]) -> str:
+    if not anaretic:
+        return "No planets or points at the anaretic degree (29°)."
+    lines = []
+    for a in anaretic:
+        body = a["body"].replace("_", " ").title()
+        lines.append(
+            f"- {body} at 29° {a['sign']} — finishing energy; urgency to resolve unfinished themes before the next sign chapter begins"
+        )
+    return "\n".join(lines)
+
+
+def _format_sect(sect: dict) -> str:
+    if not sect:
+        return "Sect data unavailable."
+    chart_type = sect.get("chart_type", "unknown").capitalize()
+    is_day = chart_type == "Day"
+    planets = sect.get("planets", {})
+
+    lines = [f"({chart_type} chart — Sun {'above' if is_day else 'below'} the horizon at birth)"]
+    for planet, data in planets.items():
+        in_sect = data.get("in_sect")
+        role = data.get("role")
+        if in_sect is None:
+            continue
+        label = planet.capitalize()
+        if role == "malefic":
+            if in_sect:
+                lines.append(f"- {label}: in-sect malefic — difficulties are structured and purposeful")
+            else:
+                lines.append(f"- **{label}: out-of-sect malefic** — most destabilizing planet; erratic, harder to channel constructively")
+        elif role == "benefic":
+            if in_sect:
+                lines.append(f"- {label}: in-sect benefic — gifts flow naturally and accessibly")
+            else:
+                lines.append(f"- {label}: out-of-sect benefic — blessings present but require conscious cultivation")
+    return "\n".join(lines)
+
+
 def _format_chart_ruler(chart_ruler: dict | None) -> str:
     if not chart_ruler:
         return "Chart ruler unavailable (Ascendant data missing)."
@@ -311,8 +350,10 @@ def build_prompt(state: "AstrologerState") -> str:
             _format_planet("Pluto", chart.get("pluto")),
             _format_planet("Chiron", chart.get("chiron")),
         ])
+        anaretic_section = "## Anaretic Degrees (29°)\n" + _format_anaretic_degrees(chart.get("anaretic_degrees") or [])
         ruler_section = "## Chart Ruler\n" + _format_chart_ruler(chart.get("chart_ruler"))
         balance_section = "## Elemental & Modal Balance\n" + _format_balance(chart.get("balance") or {})
+        sect_section = "## Planetary Sect\n" + _format_sect(chart.get("sect") or {})
         lunar_phase_section = "## Natal Lunar Phase\n" + _format_lunar_phase(chart.get("lunar_phase") or {})
         pof_section = "## Part of Fortune\n" + _format_part_of_fortune(chart.get("part_of_fortune"))
         stelliums_section = "## Stelliums\n" + _format_stelliums(chart.get("stelliums") or [])
@@ -329,7 +370,7 @@ def build_prompt(state: "AstrologerState") -> str:
         profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
         solar_return_section = "## Solar Return Chart\n" + _format_solar_return(chart.get("solar_return") or {})
         chart_section = "\n\n".join([
-            placements, ruler_section, balance_section,
+            placements, anaretic_section, ruler_section, balance_section, sect_section,
             lunar_phase_section, pof_section, stelliums_section, receptions_section,
             nodes_section, houses_section,
             aspects_section, patterns_section, transits_section,
@@ -374,6 +415,8 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Priority hierarchy: outer-planet transits/arcs to natal ASC/MC/Sun/Moon > outer to personal planets > inner planet transits
 - Birth time confidence: when "approximate" or "unknown", treat Ascendant, house cusps, and house-based interpretations as possibilities rather than certainties; note the uncertainty explicitly and weight sign-based interpretations (unaffected by birth time) more heavily
 - Solar return chart: the SR Ascendant and any angular planets are the dominant themes for the 12-month period from the return date; integrate the SR with the profection for a complete annual picture
+- Anaretic degree (29°): a planet or angle at 29° carries life-level urgency — a chronic drive to resolve unfinished business in that sign's themes before moving on; if the chart ruler, a luminary, or the Ascendant is anaretic, this urgency colors the entire chart and should be named in the overview
+- Planetary sect: day charts (Sun in houses 7–12) favor Sun, Jupiter, Saturn; night charts favor Moon, Venus, Mars. Out-of-sect malefics (Saturn in a night chart, Mars in a day chart) are the most destabilizing planets — their difficulties are less predictable and harder to channel; name this explicitly. Out-of-sect benefics give gifts but require intentional effort to access. In-sect malefics are still difficult but more structured and purposeful.
 
 ## Synthesis Protocol — Complete Mentally Before Writing
 1. Scan ALL predictive layers and identify the 2–3 themes that recur most across natal + transits + progressions + solar arcs + profection. These become the reading's spine.
@@ -387,7 +430,7 @@ Write in warm, direct, personal language — speak TO this person, not ABOUT the
 Write these 7 sections:
 
 **1. Personal Overview**
-Open with the natal lunar phase as their fundamental life archetype. Then read Sun + Moon + Ascendant as a unified trio — what does this combination create? Note the chart ruler's sign/house and dignity: it colours the entire chart. If a stellium dominates, give it prominence. Close with elemental/modal balance as an overall temperament portrait.
+Open with the natal lunar phase as their fundamental life archetype. Then read Sun + Moon + Ascendant as a unified trio — what does this combination create? Note the chart ruler's sign/house and dignity: it colours the entire chart. If a stellium dominates, give it prominence. If any anaretic (29°) planets or angles exist, name the urgency theme — it is a defining life quality. Name the out-of-sect malefic (if any) as a recurring source of friction. Close with elemental/modal balance as an overall temperament portrait.
 
 **2. Life Direction & Karmic Themes**
 North Node (sign + house) = the unfamiliar direction this soul is stretching toward. South Node = ingrained gifts that become a comfort-zone trap. Place any aspect patterns here as structural life challenges or gifts — explain what the configuration *does* to this person's life trajectory, not just what the pattern is. Integrate Chiron's wound/gift.
@@ -399,7 +442,7 @@ Progressed Sun sign/house = the psychological chapter; what is being developed a
 Open with the profection year: which house/theme is activated, what the lord of the year is doing natally, and if it is being hit by a current transit or solar arc. Then present transits in priority order (outer planets to angles/luminaries first). For each significant transit, name: natal planet hit, house it rules, what area of life is activated, and approximate duration. Distinguish solar arc events ("a milestone arriving") from transiting weather ("a seasonal pressure"). If 3+ layers converge on one theme, say so directly.
 
 **5. Key Life Themes** (exactly 3–4 themes)
-Each theme must be supported by at least 2 independent chart factors. Draw from aspect patterns, natal dignity extremes, stelliums, mutual receptions, nodal axis. Name tensions honestly — if the chart shows a creative gift in friction with a structuring challenge, say what that dynamic produces and how to work with it.
+Each theme must be supported by at least 2 independent chart factors. Draw from aspect patterns, natal dignity extremes, stelliums, mutual receptions, nodal axis, anaretic degrees, and sect status. The out-of-sect malefic, if present, almost always generates a permanent life theme — include it if significant. Name tensions honestly — if the chart shows a creative gift in friction with a structuring challenge, say what that dynamic produces and how to work with it.
 
 **6. Practical Guidance**
 3–4 specific, actionable items. Each must be tied to a specific applying transit, solar arc, or progressed aspect and include an approximate timeframe. Where the profection lord is involved, connect it explicitly: "Since [planet] rules your year and is currently [condition], this is the moment to..."
@@ -440,8 +483,12 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         pof_text = _format_part_of_fortune(chart.get("part_of_fortune"))
         stelliums_text = _format_stelliums(chart.get("stelliums") or [])
         receptions_text = _format_mutual_receptions(chart.get("mutual_receptions") or [])
+        anaretic_text = _format_anaretic_degrees(chart.get("anaretic_degrees") or [])
+        sect_text = _format_sect(chart.get("sect") or {})
         chart_summary = (
-            f"{placements}\n\nChart Ruler:\n{ruler_text}"
+            f"{placements}\n\nAnaretic Degrees (29°):\n{anaretic_text}"
+            f"\n\nPlanetary Sect:\n{sect_text}"
+            f"\n\nChart Ruler:\n{ruler_text}"
             f"\n\nLunar Phase:\n{lunar_phase_text}"
             f"\n\nPart of Fortune:\n{pof_text}"
             f"\n\nStelliums:\n{stelliums_text}"

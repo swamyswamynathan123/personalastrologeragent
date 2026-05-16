@@ -77,6 +77,12 @@ _HOUSE_NUMBER: dict[str, int] = {
     "Ninth_House": 9, "Tenth_House": 10, "Eleventh_House": 11, "Twelfth_House": 12,
 }
 
+# Sect: classical day/night planet groupings
+_SECT_DIURNAL = {"sun", "jupiter", "saturn"}     # day sect planets
+_SECT_NOCTURNAL = {"moon", "venus", "mars"}       # night sect planets
+_SECT_MALEFICS = {"saturn", "mars"}
+_SECT_BENEFICS = {"jupiter", "venus"}
+
 _LUNAR_PHASES = [
     (0,   45,  "New Moon",      "instinctive, subjective, seed-planting; life driven by pure potential and new beginnings"),
     (45,  90,  "Crescent",      "emerging from the past, striving to establish something new against resistance"),
@@ -438,6 +444,62 @@ def compute_mutual_receptions(chart: dict) -> list[dict]:
                     "planet2": p2, "planet2_sign": d2["sign"],
                 })
     return receptions
+
+
+def compute_anaretic_degrees(chart: dict) -> list[dict]:
+    """Flag any planet or angle at 29° of a sign (finishing/urgency energy)."""
+    anaretic = []
+    for body in list(_PLANETS) + ["chiron", "ascendant", "midheaven", "north_node"]:
+        data = chart.get(body)
+        if not data:
+            continue
+        pos = data.get("position")
+        if pos is not None and pos >= 29.0:
+            anaretic.append({"body": body, "sign": data.get("sign"), "position": pos})
+    return anaretic
+
+
+def compute_sect(chart: dict) -> dict:
+    """Determine day/night chart sect and flag each classical planet as in-sect or out-of-sect."""
+    sun = chart.get("sun")
+    if not sun:
+        return {}
+
+    raw_house = sun.get("house")
+    sun_house = raw_house if isinstance(raw_house, int) else _HOUSE_NUMBER.get(str(raw_house), 0)
+    is_day = sun_house >= 7
+
+    planets_sect: dict[str, dict] = {}
+    for planet in _PLANETS:
+        if not chart.get(planet):
+            continue
+        if planet in _SECT_DIURNAL:
+            sect = "diurnal"
+            in_sect = is_day
+        elif planet in _SECT_NOCTURNAL:
+            sect = "nocturnal"
+            in_sect = not is_day
+        elif planet == "mercury":
+            # Mercury adapts to the chart sect
+            sect = "diurnal" if is_day else "nocturnal"
+            in_sect = True
+        else:
+            # Outer planets (uranus, neptune, pluto) have no classical sect
+            planets_sect[planet] = {"sect": None, "in_sect": None, "role": "outer"}
+            continue
+
+        if planet in _SECT_MALEFICS:
+            role = "malefic"
+        elif planet in _SECT_BENEFICS:
+            role = "benefic"
+        elif planet in ("sun", "moon"):
+            role = "luminary"
+        else:
+            role = "neutral"
+
+        planets_sect[planet] = {"sect": sect, "in_sect": in_sect, "role": role}
+
+    return {"chart_type": "day" if is_day else "night", "planets": planets_sect}
 
 
 def compute_solar_arcs(natal_chart: dict, progressions: dict) -> dict:
@@ -910,5 +972,9 @@ def compute_chart(
     chart["part_of_fortune"] = compute_part_of_fortune(chart)
     chart["stelliums"] = compute_stelliums(chart)
     chart["mutual_receptions"] = compute_mutual_receptions(chart)
+
+    # Anaretic degrees and planetary sect
+    chart["anaretic_degrees"] = compute_anaretic_degrees(chart)
+    chart["sect"] = compute_sect(chart)
 
     return chart
