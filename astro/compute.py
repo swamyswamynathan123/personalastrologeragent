@@ -131,6 +131,30 @@ _FIXED_STARS: list[tuple[str, float, str, str]] = [
      "risk of undoing through stubbornness or misfortune; themes of isolation, loss, or self-inflicted downfall"),
 ]
 
+# ── Vedic / Jyotish constants ────────────────────────────────────────────────
+
+_NAKSHATRA_NAMES = [
+    "Ashwini", "Bharani", "Krittika", "Rohini", "Mrigashira", "Ardra",
+    "Punarvasu", "Pushya", "Ashlesha", "Magha", "Purva Phalguni", "Uttara Phalguni",
+    "Hasta", "Chitra", "Swati", "Vishakha", "Anuradha", "Jyeshtha",
+    "Mula", "Purva Ashadha", "Uttara Ashadha", "Shravana", "Dhanishtha",
+    "Shatabhisha", "Purva Bhadrapada", "Uttara Bhadrapada", "Revati",
+]
+
+# Vimshottari lord for each nakshatra (cycles through 9 lords × 3 = 27)
+_NAKSHATRA_LORDS = ["ketu", "venus", "sun", "moon", "mars", "rahu", "jupiter", "saturn", "mercury"]
+
+# Vimshottari Dasha sequence: (planet, years); total = 120
+_VIMSHOTTARI_SEQUENCE = [
+    ("ketu", 7), ("venus", 20), ("sun", 6), ("moon", 10), ("mars", 7),
+    ("rahu", 18), ("jupiter", 16), ("saturn", 19), ("mercury", 17),
+]
+
+# Navamsha (D9) starting sign index by element of the tropical sign
+_D9_START: dict[str, int] = {"Fire": 0, "Earth": 9, "Air": 6, "Water": 3}
+
+_NAKSHATRA_SIZE = 360.0 / 27  # 13.3333…°
+
 _LUNAR_PHASES = [
     (0,   45,  "New Moon",      "instinctive, subjective, seed-planting; life driven by pure potential and new beginnings"),
     (45,  90,  "Crescent",      "emerging from the past, striving to establish something new against resistance"),
@@ -548,6 +572,138 @@ def compute_sect(chart: dict) -> dict:
         planets_sect[planet] = {"sect": sect, "in_sect": in_sect, "role": role}
 
     return {"chart_type": "day" if is_day else "night", "planets": planets_sect}
+
+
+def lahiri_ayanamsa(year: int, month: int, day: int) -> float:
+    """Lahiri (Chitrapaksha) ayanamsa — accurate ±0.5° for 1900–2100."""
+    decimal_year = year + (month - 1) / 12.0 + (day - 1) / 365.25
+    return 23.8531 + (decimal_year - 2000.0) * 0.01397
+
+
+def _get_nakshatra(sidereal_abs: float) -> dict:
+    nak_idx = int(sidereal_abs / _NAKSHATRA_SIZE) % 27
+    pos_in_nak = sidereal_abs % _NAKSHATRA_SIZE
+    pada = int(pos_in_nak / (_NAKSHATRA_SIZE / 4)) + 1
+    lord_seq_idx = nak_idx % 9
+    return {
+        "name": _NAKSHATRA_NAMES[nak_idx],
+        "lord": _NAKSHATRA_LORDS[lord_seq_idx],
+        "pada": pada,
+        "index": nak_idx,
+    }
+
+
+def _get_navamsha_sign(sidereal_abs: float) -> str:
+    sign_idx = int(sidereal_abs / 30) % 12
+    sign = _SIGNS[sign_idx]
+    element = _SIGN_ELEMENT.get(sign, "Fire")
+    pos_in_sign = sidereal_abs % 30
+    nav_num = int(pos_in_sign / (30.0 / 9))  # 0–8
+    d9_start = _D9_START.get(element, 0)
+    return _SIGNS[(d9_start + nav_num) % 12]
+
+
+def compute_vimshottari_dasha(
+    moon_sidereal_abs: float,
+    birth_year: int, birth_month: int, birth_day: int,
+    current_year: int, current_month: int, current_day: int,
+) -> dict:
+    """Compute current Vimshottari Mahadasha and Antardasha from Moon's sidereal position."""
+    from datetime import date, timedelta
+
+    nak_idx = int(moon_sidereal_abs / _NAKSHATRA_SIZE) % 27
+    lord_seq_idx = nak_idx % 9
+    lord_name, lord_years = _VIMSHOTTARI_SEQUENCE[lord_seq_idx]
+
+    # Fraction of nakshatra elapsed = fraction of mahadasha used at birth
+    fraction_elapsed = (moon_sidereal_abs % _NAKSHATRA_SIZE) / _NAKSHATRA_SIZE
+    years_elapsed_at_birth = fraction_elapsed * lord_years
+
+    birth_date = date(birth_year, birth_month, birth_day)
+    current_date = date(current_year, current_month, current_day)
+    initial_maha_start = birth_date - timedelta(days=round(years_elapsed_at_birth * 365.25))
+
+    # Flat sequence from that starting lord (5 cycles = 600 years, ample coverage)
+    flat_seq = [_VIMSHOTTARI_SEQUENCE[(lord_seq_idx + i) % 9] for i in range(45)]
+
+    maha_lord = maha_start = maha_end = None
+    maha_years = 0
+    cursor = initial_maha_start
+    for planet, years in flat_seq:
+        period_end = cursor + timedelta(days=round(years * 365.25))
+        if cursor <= current_date < period_end:
+            maha_lord, maha_start, maha_end, maha_years = planet, cursor, period_end, years
+            break
+        cursor = period_end
+
+    if not maha_lord:
+        return {}
+
+    # Antardasha within current Mahadasha
+    maha_seq_idx = next(i for i, (p, _) in enumerate(_VIMSHOTTARI_SEQUENCE) if p == maha_lord)
+    antar_lord = antar_start = antar_end = None
+    years_remaining_antar = None
+
+    antar_cursor = maha_start
+    for i in range(9):
+        antar_seq_idx = (maha_seq_idx + i) % 9
+        antar_planet, antar_years = _VIMSHOTTARI_SEQUENCE[antar_seq_idx]
+        antar_days = round((maha_years * antar_years / 120.0) * 365.25)
+        antar_end_dt = antar_cursor + timedelta(days=antar_days)
+        if antar_cursor <= current_date < antar_end_dt:
+            antar_lord, antar_start, antar_end = antar_planet, antar_cursor, antar_end_dt
+            years_remaining_antar = round((antar_end - current_date).days / 365.25, 1)
+            break
+        antar_cursor = antar_end_dt
+
+    return {
+        "mahadasha_lord": maha_lord,
+        "mahadasha_start": maha_start.isoformat(),
+        "mahadasha_end": maha_end.isoformat(),
+        "mahadasha_years": maha_years,
+        "years_remaining_mahadasha": round((maha_end - current_date).days / 365.25, 1),
+        "antardasha_lord": antar_lord,
+        "antardasha_start": antar_start.isoformat() if antar_start else None,
+        "antardasha_end": antar_end.isoformat() if antar_end else None,
+        "years_remaining_antardasha": years_remaining_antar,
+    }
+
+
+def compute_vedic(
+    chart: dict,
+    birth_year: int, birth_month: int, birth_day: int,
+    current_year: int, current_month: int, current_day: int,
+) -> dict:
+    """Compute Vedic/Jyotish overlay: Lahiri sidereal positions, nakshatras, navamsha, Vimshottari Dasha."""
+    ayanamsa = lahiri_ayanamsa(birth_year, birth_month, birth_day)
+    sidereal: dict = {"ayanamsa": round(ayanamsa, 4)}
+
+    for body in list(_PLANETS) + ["ascendant", "midheaven", "north_node"]:
+        data = chart.get(body)
+        if not data or data.get("abs_pos") is None:
+            continue
+        sid_abs = (data["abs_pos"] - ayanamsa) % 360
+        sid_sign, sid_pos = _sign_from_abs_pos(sid_abs)
+        entry: dict = {
+            "sidereal_abs": round(sid_abs, 2),
+            "sign": sid_sign,
+            "position": round(sid_pos, 2),
+            "navamsha": _get_navamsha_sign(sid_abs),
+        }
+        if body == "moon":
+            entry["nakshatra"] = _get_nakshatra(sid_abs)
+        sidereal[body] = entry
+
+    moon_sid = sidereal.get("moon")
+    dasha: dict = {}
+    if moon_sid and moon_sid.get("sidereal_abs") is not None:
+        dasha = compute_vimshottari_dasha(
+            moon_sid["sidereal_abs"],
+            birth_year, birth_month, birth_day,
+            current_year, current_month, current_day,
+        )
+
+    return {"ayanamsa": round(ayanamsa, 4), "sidereal": sidereal, "dasha": dasha}
 
 
 def compute_firdaria(

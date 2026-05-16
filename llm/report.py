@@ -375,6 +375,52 @@ def _format_progressions(prog: dict | None) -> str:
     return "\n".join(lines)
 
 
+def _format_vedic(vedic: dict | None) -> str:
+    if not vedic:
+        return "Vedic (Jyotish) overlay unavailable."
+    ayanamsa = vedic.get("ayanamsa", "?")
+    sid = vedic.get("sidereal") or {}
+    dasha = vedic.get("dasha") or {}
+
+    lines = [f"(Lahiri ayanamsa: {ayanamsa}° — sidereal positions are tropical minus this value)"]
+
+    key_bodies = [
+        ("Sun", "sun"), ("Moon", "moon"), ("Ascendant (Lagna)", "ascendant"),
+        ("Mercury", "mercury"), ("Venus", "venus"), ("Mars", "mars"),
+        ("Jupiter", "jupiter"), ("Saturn", "saturn"),
+    ]
+    for label, key in key_bodies:
+        d = sid.get(key)
+        if not d:
+            continue
+        nav = f", D9 Navamsha: {d['navamsha']}" if d.get("navamsha") else ""
+        if key == "moon" and d.get("nakshatra"):
+            nak = d["nakshatra"]
+            lines.append(
+                f"- Sidereal {label}: {d['sign']} {d['position']}°  |  "
+                f"Nakshatra: {nak['name']} (lord: {nak['lord'].capitalize()}, pada {nak['pada']}){nav}"
+            )
+        else:
+            lines.append(f"- Sidereal {label}: {d['sign']} {d['position']}°{nav}")
+
+    if dasha:
+        maha = (dasha.get("mahadasha_lord") or "?").capitalize()
+        maha_end = (dasha.get("mahadasha_end") or "")[:10]
+        maha_rem = dasha.get("years_remaining_mahadasha", "?")
+        maha_yrs = dasha.get("mahadasha_years", "?")
+        lines.append(
+            f"- Vimshottari Mahadasha: {maha} ({maha_yrs}-yr period, ends {maha_end}, {maha_rem} yrs remaining)"
+        )
+        antar = dasha.get("antardasha_lord")
+        if antar:
+            antar_label = antar.capitalize()
+            antar_end = (dasha.get("antardasha_end") or "")[:10]
+            antar_rem = dasha.get("years_remaining_antardasha", "?")
+            lines.append(f"- Antardasha (sub-period): {antar_label} (ends {antar_end}, {antar_rem} yrs remaining)")
+
+    return "\n".join(lines)
+
+
 def build_prompt(state: "AstrologerState") -> str:
     chart = state.get("chart_data") or {}
     focus = state.get("report_focus") or "general life reading"
@@ -418,6 +464,7 @@ def build_prompt(state: "AstrologerState") -> str:
         profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
         firdaria_section = "## Firdaria Time Lords\n" + _format_firdaria(chart.get("firdaria"), chart)
         solar_return_section = "## Solar Return Chart\n" + _format_solar_return(chart.get("solar_return") or {})
+        vedic_section = "## Vedic (Jyotish) Overlay\n" + _format_vedic(chart.get("vedic"))
         chart_section = "\n\n".join([
             placements, anaretic_section, fixed_stars_section, ruler_section, balance_section, sect_section,
             lunar_phase_section, pof_section, stelliums_section, receptions_section,
@@ -425,7 +472,7 @@ def build_prompt(state: "AstrologerState") -> str:
             aspects_section, patterns_section, transits_section,
             progressions_section, prog_aspects_section,
             solar_arcs_section, solar_arc_aspects_section,
-            profection_section, firdaria_section, solar_return_section,
+            profection_section, firdaria_section, solar_return_section, vedic_section,
         ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
@@ -467,6 +514,8 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Anaretic degree (29°): a planet or angle at 29° carries life-level urgency — a chronic drive to resolve unfinished business in that sign's themes before moving on; if the chart ruler, a luminary, or the Ascendant is anaretic, this urgency colors the entire chart and should be named in the overview
 - Planetary sect: day charts (Sun in houses 7–12) favor Sun, Jupiter, Saturn; night charts favor Moon, Venus, Mars. Out-of-sect malefics (Saturn in a night chart, Mars in a day chart) are the most destabilizing planets — their difficulties are less predictable and harder to channel; name this explicitly. Out-of-sect benefics give gifts but require intentional effort to access. In-sect malefics are still difficult but more structured and purposeful.
 - Firdaria: the major lord's natal condition (sign, house, dignity, retrograde status) determines the biographical chapter's quality and difficulty. The sub-lord adds a texture layer within the major period. If the Firdaria major lord = profection lord of the year, that planet is doubly activated and should be flagged as the single most important planet right now. A retrograde or debilitated Firdaria lord = a challenging multi-year chapter requiring inner work.
+- Vedic overlay: sidereal positions (Lahiri ayanamsa, ~24°) show where planets fall in the Jyotish zodiac — use these to add depth when the tropical and sidereal agree, or to note where the two systems diverge; the Moon's nakshatra is the most significant Vedic datum (governs Vimshottari timing and instinctive nature); the Navamsha (D9) shows soul-level qualities and marriage/dharma themes. Use Vedic data as a cross-system confirmation — note resonances, do not create contradictions with the Western reading.
+- Vimshottari Dasha: the Mahadasha (major period, 6–20 years) sets the biographical backdrop; the Antardasha (sub-period, months to years) is the current texture within it. If the Mahadasha lord is the same as the Firdaria major lord, this is a profound convergence across both traditions — name it explicitly as the chart's single most dominant current theme. If the Dasha lord is also the profection lord of the year, all three timing systems point to the same planet — this is exceptional and must be flagged.
 - Fixed stars: only exact conjunctions (1° orb) matter — no other aspects. The 4 Royal Stars (Aldebaran, Regulus, Antares, Fomalhaut) conjunct a luminary or angle are life-defining signatures; Algol conjunct any personal planet or the Ascendant is the chart's most intense pressure point and must be named. Spica, Sirius, Vega near the Sun/Moon/Ascendant indicate distinctive gifts. Weave fixed stars into interpretation naturally — do not list them mechanically.
 
 ## Synthesis Protocol — Complete Mentally Before Writing
@@ -490,7 +539,7 @@ North Node (sign + house) = the unfamiliar direction this soul is stretching tow
 Progressed Sun sign/house = the psychological chapter; what is being developed and released. Progressed Moon = the emotional climate in force for ~2.5 years. Name any progressed sign change within ±2 years and the approximate year it perfects. Highlight applying progressed aspects within 0.5° as what is crystallizing right now.
 
 **4. Current Cosmic Climate**
-Open with the two time lord layers together: the Firdaria major/sub period (the biographical arc — years to decades) and the profection year (the annual focus). State what each lord is doing natally. If they are the same planet, say so explicitly — this is the chart's most activated planet right now. Then present transits in priority order (outer planets to angles/luminaries first). For each significant transit, name: natal planet hit, house it rules, what area of life is activated, and approximate duration. Distinguish solar arc events ("a milestone arriving") from transiting weather ("a seasonal pressure"). If 3+ layers converge on one theme, say so directly.
+Open with the three time lord layers together: the Firdaria major/sub period (Western biographical arc — years to decades), the Vimshottari Mahadasha/Antardasha (Vedic biographical arc — cross-system confirmation), and the profection year (annual focus). State what each lord is doing natally. If the Firdaria lord and Vimshottari Mahadasha lord are the same planet, say so explicitly — this is the chart's most dominant current theme across both traditions. Then present transits in priority order (outer planets to angles/luminaries first). For each significant transit, name: natal planet hit, house it rules, what area of life is activated, and approximate duration. Distinguish solar arc events ("a milestone arriving") from transiting weather ("a seasonal pressure"). If 3+ layers converge on one theme, say so directly.
 
 **5. Key Life Themes** (exactly 3–4 themes)
 Each theme must be supported by at least 2 independent chart factors. Draw from aspect patterns, natal dignity extremes, stelliums, mutual receptions, nodal axis, anaretic degrees, sect status, and fixed star conjunctions. A Royal Star on a luminary or angle, or Algol on a personal planet, is almost always a standalone life theme. The out-of-sect malefic, if present, almost always generates a permanent life theme. Name tensions honestly — if the chart shows a creative gift in friction with a structuring challenge, say what that dynamic produces and how to work with it.
@@ -541,6 +590,7 @@ def _build_followup_messages(
             f"\n\nAnnual Profection:\n{_format_profection(chart.get('profection'))}"
             f"\n\nFirdaria Time Lords:\n{_format_firdaria(chart.get('firdaria'), chart)}"
             f"\n\nSolar Return Chart:\n{_format_solar_return(chart.get('solar_return') or {})}"
+            f"\n\nVedic (Jyotish) Overlay:\n{_format_vedic(chart.get('vedic'))}"
         )
     else:
         chart_summary = "Natal chart data unavailable."
@@ -595,12 +645,14 @@ def generate_report(state: "AstrologerState") -> str:
             {
                 "role": "system",
                 "content": (
-                    "You are a master Western astrologer who synthesizes natal, transit, progression, "
-                    "solar arc, and traditional Hellenistic techniques into coherent, personally grounded readings. "
-                    "You think in themes first — you identify the dominant patterns across all layers, then show how "
-                    "each technique confirms them. You never make vague generalizations. Every statement is anchored "
-                    "to specific planets, degrees, and houses in the chart. You speak directly and warmly to the person, "
-                    "as if sitting across from them."
+                    "You are a master astrologer fluent in both Western and Vedic (Jyotish) traditions. "
+                    "You synthesize natal, transit, progression, solar arc, Hellenistic, and Vedic techniques "
+                    "into coherent, personally grounded readings. You think in themes first — identify dominant "
+                    "patterns across all layers, then show how each technique confirms them. When the Firdaria "
+                    "major lord and Vimshottari Mahadasha lord are the same planet, you name this cross-tradition "
+                    "convergence explicitly. You never make vague generalizations. Every statement is anchored to "
+                    "specific planets, degrees, and houses. You speak directly and warmly to the person, as if "
+                    "sitting across from them."
                 ),
             },
             {"role": "user", "content": build_prompt(state)},

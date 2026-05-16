@@ -116,6 +116,7 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_aspect_patterns, compute_profection,
             compute_solar_arcs, compute_solar_arc_aspects,
             compute_solar_return, compute_firdaria,
+            compute_vedic,
             generate_chart_svg, generate_transit_svg,
         )
 
@@ -218,6 +219,16 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["profection"] = None
+
+        try:
+            current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+            chart["vedic"] = compute_vedic(
+                chart,
+                birth_year=birth_dt.year, birth_month=birth_dt.month, birth_day=birth_dt.day,
+                current_year=current_dt.year, current_month=current_dt.month, current_day=current_dt.day,
+            )
+        except Exception:
+            chart["vedic"] = None
 
         try:
             current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
