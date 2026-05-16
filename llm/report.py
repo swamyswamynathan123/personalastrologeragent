@@ -105,10 +105,42 @@ def _format_houses(houses: dict) -> str:
     for num in range(1, 13):
         h = houses.get(str(num))
         theme = _HOUSE_THEMES.get(num, "")
-        if h and h.get("sign"):
-            lines.append(f"- House {num} ({theme}): {h['sign']} {h['position']}°")
-        else:
+        if not h or not h.get("sign"):
             lines.append(f"- House {num} ({theme}): unavailable")
+            continue
+        ruler = h.get("ruler")
+        if ruler:
+            retro = " (retrograde)" if ruler.get("retrograde") else ""
+            house_pos = f", House {ruler['house']}" if ruler.get("house") else ""
+            dignity = f" [{ruler['dignity']}]" if ruler.get("dignity") else ""
+            ruler_str = f" → ruler {ruler['planet'].capitalize()} in {ruler['sign']} {ruler['position']}°{retro}{house_pos}{dignity}"
+        else:
+            ruler_str = ""
+        lines.append(f"- House {num} ({theme}): {h['sign']} {h['position']}°{ruler_str}")
+    return "\n".join(lines)
+
+
+def _format_progressions(prog: dict | None) -> str:
+    if not prog:
+        return "Secondary progressions unavailable."
+    date_str = prog.get("progressed_date", "unknown")
+    lines = [f"(Progressed date: {date_str} — each year of life = 1 day after birth)"]
+    for label, key in [("Sun", "sun"), ("Moon", "moon"), ("Mercury", "mercury"),
+                        ("Venus", "venus"), ("Mars", "mars")]:
+        data = prog.get(key)
+        if data:
+            retro = " (retrograde)" if data.get("retrograde") else ""
+            house = f", House {data['house']}" if data.get("house") else ""
+            dignity = f" [{data['dignity']}]" if data.get("dignity") else ""
+            lines.append(f"- Progressed {label}: {data['sign']} {data['position']}°{retro}{house}{dignity}")
+        else:
+            lines.append(f"- Progressed {label}: unavailable")
+    for label, key in [("Ascendant", "ascendant"), ("Midheaven", "midheaven")]:
+        data = prog.get(key)
+        if data:
+            lines.append(f"- Progressed {label}: {data['sign']} {data['position']}°")
+        else:
+            lines.append(f"- Progressed {label}: unavailable")
     return "\n".join(lines)
 
 
@@ -139,7 +171,8 @@ def build_prompt(state: "AstrologerState") -> str:
         houses_section = "## House Cusps\n" + _format_houses(chart.get("houses") or {})
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
-        chart_section = "\n\n".join([placements, ruler_section, balance_section, nodes_section, houses_section, aspects_section, transits_section])
+        progressions_section = "## Secondary Progressions\n" + _format_progressions(chart.get("progressions"))
+        chart_section = "\n\n".join([placements, ruler_section, balance_section, nodes_section, houses_section, aspects_section, transits_section, progressions_section])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
 
@@ -152,6 +185,7 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 Dignity levels: domicile (strongest) > exaltation (strong) > no dignity (neutral) > detriment (weakened) > fall (most challenged).
 For aspects: applying aspects (planets still moving toward exact) are currently intensifying; separating aspects are past their peak and more ingrained.
 Use the elemental and modal balance to characterise overall temperament before interpreting individual placements.
+Progressed Sun and Moon show the current life phase; a progressed sign change is a major threshold event worth highlighting.
 
 ## Person Details
 - **Full Name:** {state['full_name']}
@@ -167,12 +201,13 @@ Use the elemental and modal balance to characterise overall temperament before i
 
 ## Instructions
 Write the report in clear, friendly, professional language. Structure it with these sections:
-1. **Personal Overview** — Core personality traits from Sun, Moon, Ascendant, and key natal aspects
+1. **Personal Overview** — Core personality traits from Sun, Moon, Ascendant, chart ruler, and elemental balance
 2. **Life Direction & Karmic Themes** — Insights from the North/South Node axis and 12th/8th house placements
-3. **Current Cosmic Climate** — Active transits (applying ones are most urgent), and what they mean for this person now
-4. **Key Life Themes** — 3–4 dominant themes from house rulers, stelliums, and applying natal aspects
-5. **Practical Guidance** — Specific, actionable advice for the coming weeks grounded in the active transits
-6. **Favorable Timing** — Suggest favorable days or periods based on applying transits and chart patterns
+3. **Current Life Phase** — What the progressed Sun and Moon reveal about the chapter this person is in right now; highlight any recent or imminent sign changes
+4. **Current Cosmic Climate** — Active transits (applying ones are most urgent) and what they mean personally, referencing house rulers for context
+5. **Key Life Themes** — 3–4 dominant themes from natal aspects, house rulers, and dignity levels
+6. **Practical Guidance** — Specific, actionable advice for the coming weeks grounded in applying transits and progressions
+7. **Favorable Timing** — Suggest favorable days or periods based on applying transits and progressed Moon sign
 
 Tone: warm, empowering, specific to this individual. Do not make vague generalizations.
 """
@@ -197,11 +232,13 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         ruler_text = _format_chart_ruler(chart.get("chart_ruler"))
         aspects_text = _format_aspects(chart.get("aspects") or [])
         transits_text = _format_transits(chart.get("transits") or [])
+        prog_text = _format_progressions(chart.get("progressions"))
         chart_summary = (
             f"{placements}\n\nChart Ruler:\n{ruler_text}"
             f"\n\nLunar Nodes:\n{nodes_text}"
             f"\n\nNatal Aspects:\n{aspects_text}"
             f"\n\nCurrent Transits:\n{transits_text}"
+            f"\n\nSecondary Progressions:\n{prog_text}"
         )
     else:
         chart_summary = "Natal chart data unavailable."
@@ -238,7 +275,7 @@ def generate_report(state: "AstrologerState") -> str:
 
     response = client.chat.completions.create(
         model="gpt-4o",
-        max_tokens=2048,
+        max_tokens=4096,
         messages=[
             {
                 "role": "system",

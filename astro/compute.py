@@ -187,6 +187,85 @@ def compute_chart_ruler(chart: dict) -> Optional[dict]:
     }
 
 
+def compute_house_rulers(chart: dict) -> dict:
+    """Return ruling planet data keyed by house number string ('1'–'12')."""
+    rulers = {}
+    houses = chart.get("houses") or {}
+    for num in range(1, 13):
+        house_data = houses.get(str(num))
+        if not house_data or not house_data.get("sign"):
+            rulers[str(num)] = None
+            continue
+        ruler_key = _SIGN_RULER.get(house_data["sign"])
+        if not ruler_key:
+            rulers[str(num)] = None
+            continue
+        planet_data = chart.get(ruler_key)
+        if not planet_data:
+            rulers[str(num)] = None
+            continue
+        rulers[str(num)] = {
+            "planet": ruler_key,
+            "sign": planet_data.get("sign"),
+            "position": planet_data.get("position"),
+            "house": planet_data.get("house"),
+            "retrograde": planet_data.get("retrograde", False),
+            "dignity": planet_data.get("dignity"),
+        }
+    return rulers
+
+
+def compute_progressions(
+    birth_year: int, birth_month: int, birth_day: int,
+    birth_hour: int, birth_minute: int,
+    current_year: int, current_month: int, current_day: int,
+    city: str, nation: str, tz_str: str,
+) -> dict:
+    """Compute secondary progressions: each year of life = 1 day after birth."""
+    from datetime import date, timedelta
+
+    birth_date = date(birth_year, birth_month, birth_day)
+    current_date = date(current_year, current_month, current_day)
+    age_years = (current_date - birth_date).days / 365.25
+    progressed_date = birth_date + timedelta(days=age_years)
+
+    subject = AstrologicalSubject(
+        name="Progressed",
+        year=progressed_date.year,
+        month=progressed_date.month,
+        day=progressed_date.day,
+        hour=birth_hour,
+        minute=birth_minute,
+        city=city,
+        nation=nation,
+        tz_str=tz_str,
+        online=True,
+    )
+
+    # Only personal planets progress meaningfully; outer planets barely move
+    progressed: dict = {"progressed_date": progressed_date.isoformat()}
+    for planet in ["sun", "moon", "mercury", "venus", "mars"]:
+        data = _safe_planet(subject, planet)
+        if data and data.get("sign"):
+            dignity = _get_dignity(planet, data["sign"])
+            if dignity:
+                data["dignity"] = dignity
+        progressed[planet] = data
+
+    first = getattr(subject, "first_house", None)
+    tenth = getattr(subject, "tenth_house", None)
+    progressed["ascendant"] = {
+        "sign": getattr(first, "sign", None),
+        "position": round(getattr(first, "position", 0.0), 2),
+    } if first else None
+    progressed["midheaven"] = {
+        "sign": getattr(tenth, "sign", None),
+        "position": round(getattr(tenth, "position", 0.0), 2),
+    } if tenth else None
+
+    return progressed
+
+
 def compute_aspects(chart: dict) -> list[dict]:
     bodies: dict[str, tuple[float, bool]] = {}
     for planet in _PLANETS:
@@ -311,5 +390,10 @@ def compute_chart(
     # Elemental / modal balance and chart ruler (computed after dignities)
     chart["balance"] = compute_balance(chart)
     chart["chart_ruler"] = compute_chart_ruler(chart)
+
+    # House rulers merged into each house entry
+    for num_str, ruler in compute_house_rulers(chart).items():
+        if chart["houses"].get(num_str) is not None:
+            chart["houses"][num_str]["ruler"] = ruler
 
     return chart
