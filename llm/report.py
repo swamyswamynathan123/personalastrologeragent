@@ -76,6 +76,47 @@ Tone: warm, empowering, specific to this individual. Do not make vague generaliz
 """
 
 
+def answer_followup(state: "AstrologerState", chat_history: list[dict], question: str) -> str:
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+    chart = state.get("chart_data") or {}
+    chart_summary = "\n".join([
+        _format_planet("Sun", chart.get("sun")),
+        _format_planet("Moon", chart.get("moon")),
+        _format_planet("Mercury", chart.get("mercury")),
+        _format_planet("Venus", chart.get("venus")),
+        _format_planet("Mars", chart.get("mars")),
+        _format_planet("Jupiter", chart.get("jupiter")),
+        _format_planet("Saturn", chart.get("saturn")),
+        f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
+    ]) if chart else "Natal chart data unavailable."
+
+    system = (
+        f"You are an expert Western astrologer. You have already provided a full reading for "
+        f"{state['full_name']} (born {state['parsed_dob']} in {state['birth_location']}, "
+        f"birth time {state['birth_time']} {state.get('birth_time_timezone', '')}).\n\n"
+        f"Their natal chart:\n{chart_summary}\n\n"
+        "Answer the user's follow-up questions based on their chart and your previous reading. "
+        "Be specific and grounded in the chart data — do NOT invent placements not listed above. "
+        "Keep responses warm, concise, and actionable."
+    )
+
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "assistant", "content": state["final_report"]},
+        *chat_history,
+        {"role": "user", "content": question},
+    ]
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=1024,
+        messages=messages,
+    )
+
+    return response.choices[0].message.content
+
+
 def generate_report(state: "AstrologerState") -> str:
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 

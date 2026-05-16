@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from agent.graph import graph
 from agent.state import AstrologerState
+from llm.report import answer_followup
 
 load_dotenv()
 
@@ -20,6 +21,14 @@ st.title("⭐ Personal Astrologer Agent")
 st.markdown(
     "Enter your birth details to receive a personalized, time-aware astrological reading."
 )
+
+# --- Session state initialisation ---
+if "report_result" not in st.session_state:
+    st.session_state.report_result = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "validation_message" not in st.session_state:
+    st.session_state.validation_message = None
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
@@ -67,7 +76,13 @@ with st.form("astro_form"):
 
     submitted = st.form_submit_button("Generate My Reading ⭐", type="primary")
 
+# --- Form submission: run the graph ---
 if submitted:
+    # Reset previous session on new submission
+    st.session_state.report_result = None
+    st.session_state.chat_history = []
+    st.session_state.validation_message = None
+
     payload: AstrologerState = {
         "full_name": full_name.strip() if full_name else None,
         "dob": dob.strftime("%Y-%m-%d") if dob else None,
@@ -92,25 +107,64 @@ if submitted:
         result = graph.invoke(payload)
 
     if result.get("follow_up_message"):
-        st.warning("Action Required")
-        st.markdown(result["follow_up_message"])
-
+        st.session_state.validation_message = result["follow_up_message"]
     elif result.get("final_report"):
-        st.success("Your personalized reading is ready!")
-        st.divider()
-
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            st.metric("Name", result["full_name"])
-        with col_b:
-            st.metric("Date of Birth", result["parsed_dob"])
-        with col_c:
-            st.metric("Birth Location", result["birth_location"])
-
-        st.caption(f"Reading generated as of: {result['parsed_current_datetime']}")
-        st.divider()
-
-        st.markdown(result["final_report"])
-
+        st.session_state.report_result = result
     else:
         st.error("An unexpected error occurred. Please try again.")
+
+# --- Show validation message ---
+if st.session_state.validation_message:
+    st.warning("Action Required")
+    st.markdown(st.session_state.validation_message)
+
+# --- Show report and chat ---
+if st.session_state.report_result:
+    result = st.session_state.report_result
+
+    st.success("Your personalized reading is ready!")
+    st.divider()
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        st.metric("Name", result["full_name"])
+    with col_b:
+        st.metric("Date of Birth", result["parsed_dob"])
+    with col_c:
+        st.metric("Birth Location", result["birth_location"])
+
+    st.caption(f"Reading generated as of: {result['parsed_current_datetime']}")
+    st.divider()
+
+    st.markdown(result["final_report"])
+
+    # --- Follow-up chat ---
+    st.divider()
+    st.subheader("💬 Ask a follow-up question")
+    st.caption("Ask anything about your chart, placements, timing, or guidance.")
+
+    # Render existing chat history
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Chat input
+    question = st.chat_input("e.g. What does my Saturn placement mean for my career?")
+    if question:
+        # Show user message immediately
+        with st.chat_message("user"):
+            st.markdown(question)
+
+        # Get astrologer response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                answer = answer_followup(
+                    result,
+                    st.session_state.chat_history,
+                    question,
+                )
+            st.markdown(answer)
+
+        # Persist to history
+        st.session_state.chat_history.append({"role": "user", "content": question})
+        st.session_state.chat_history.append({"role": "assistant", "content": answer})
