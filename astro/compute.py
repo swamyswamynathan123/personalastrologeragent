@@ -616,6 +616,26 @@ def compute_firdaria(
     }
 
 
+def generate_chart_svg(
+    full_name: str,
+    birth_year: int, birth_month: int, birth_day: int,
+    birth_hour: int, birth_minute: int,
+    city: str, nation: str, tz_str: str,
+) -> str:
+    """Render natal chart wheel as an SVG string via kerykeion."""
+    try:
+        from kerykeion import KerykeionChartSVG
+        subject = AstrologicalSubject(
+            name=full_name,
+            year=birth_year, month=birth_month, day=birth_day,
+            hour=birth_hour, minute=birth_minute,
+            city=city, nation=nation, tz_str=tz_str, online=True,
+        )
+        return KerykeionChartSVG(subject, chart_type="Natal").makeTemplate()
+    except Exception:
+        return ""
+
+
 def compute_fixed_star_conjunctions(chart: dict, orb: float = 1.0) -> list[dict]:
     """Return natal planets/angles conjunct significant fixed stars within `orb` degrees."""
     bodies: dict[str, float] = {}

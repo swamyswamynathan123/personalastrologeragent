@@ -302,6 +302,25 @@ elif st.session_state.report_result:
     st.caption(f"Reading generated as of {result['parsed_current_datetime']}")
     st.divider()
 
+    # Natal chart wheel
+    chart_svg = (result.get("chart_data") or {}).get("chart_svg") or ""
+    if chart_svg:
+        with st.expander("Natal Chart Wheel", expanded=True):
+            st.markdown(
+                f'<div style="background:#ffffff;border-radius:12px;padding:1.2rem 1rem;'
+                f'display:flex;justify-content:center;overflow:auto;">'
+                f'<div style="max-width:580px;width:100%;">{chart_svg}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            st.download_button(
+                label="Download Chart SVG",
+                data=chart_svg,
+                file_name=f"chart_{result['full_name'].replace(' ', '_')}.svg",
+                mime="image/svg+xml",
+            )
+        st.divider()
+
     # Report rendered in a styled card
     st.markdown(
         f'<div class="report-card">{result["final_report"]}</div>',
