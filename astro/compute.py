@@ -29,6 +29,20 @@ _SIGNS = [
     "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces",
 ]
 
+_ASTEROID_IDS = {"ceres": 17, "pallas": 18, "juno": 19, "vesta": 20}
+
+_HOUSE_ORDINALS = [
+    "First_House", "Second_House", "Third_House", "Fourth_House",
+    "Fifth_House", "Sixth_House", "Seventh_House", "Eighth_House",
+    "Ninth_House", "Tenth_House", "Eleventh_House", "Twelfth_House",
+]
+
+# kerykeion stores 3-letter sign abbreviations; map them to 0-based indices
+_SIGN_ABBREV = {
+    "Ari": 0, "Tau": 1, "Gem": 2, "Can": 3, "Leo": 4, "Vir": 5,
+    "Lib": 6, "Sco": 7, "Sag": 8, "Cap": 9, "Aqu": 10, "Pis": 11,
+}
+
 _HOUSE_ATTRS = [
     "first_house", "second_house", "third_house", "fourth_house",
     "fifth_house", "sixth_house", "seventh_house", "eighth_house",
@@ -193,6 +207,62 @@ def _safe_house(subject: AstrologicalSubject, attr: str) -> Optional[dict]:
 def _sign_from_abs_pos(abs_pos: float) -> tuple[str, float]:
     idx = int(abs_pos / 30) % 12
     return _SIGNS[idx], round(abs_pos % 30, 2)
+
+
+def _house_from_lon(lon: float, houses: dict) -> Optional[str]:
+    """Return kerykeion-style house name for an ecliptic longitude, given chart house cusps."""
+    cusps = []
+    for num_str, h in houses.items():
+        if h and h.get("sign") and h.get("position") is not None:
+            try:
+                sign = h["sign"]
+                # handle both abbreviated ("Vir") and full ("Virgo") sign names
+                if sign in _SIGN_ABBREV:
+                    idx = _SIGN_ABBREV[sign]
+                else:
+                    idx = _SIGNS.index(sign)
+                abs_p = idx * 30.0 + h["position"]
+                cusps.append((abs_p, int(num_str)))
+            except (ValueError, KeyError):
+                pass
+    if len(cusps) < 12:
+        return None
+    cusps.sort()
+    lon = lon % 360
+    house_num = cusps[-1][1]
+    for i in range(len(cusps)):
+        curr_abs = cusps[i][0]
+        next_abs = cusps[(i + 1) % len(cusps)][0]
+        if next_abs > curr_abs:
+            if curr_abs <= lon < next_abs:
+                house_num = cusps[i][1]
+                break
+        else:  # crossing 0°
+            if lon >= curr_abs or lon < next_abs:
+                house_num = cusps[i][1]
+                break
+    return _HOUSE_ORDINALS[house_num - 1]
+
+
+def _compute_asteroid_pos(jd: float, body_id: int, houses: dict) -> Optional[dict]:
+    """Compute sign/position/house for a minor body via swisseph."""
+    try:
+        import os
+        import swisseph as swe
+        import kerykeion as _kery
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+        result = swe.calc_ut(jd, body_id)
+        lon, lon_speed = result[0][0], result[0][3]
+        sign, pos = _sign_from_abs_pos(lon)
+        return {
+            "sign": sign,
+            "position": pos,
+            "abs_pos": round(lon, 2),
+            "retrograde": lon_speed < 0,
+            "house": _house_from_lon(lon, houses),
+        }
+    except Exception:
+        return None
 
 
 def _get_dignity(planet: str, sign: str) -> Optional[str]:
@@ -1894,6 +1964,22 @@ def compute_chart(
     for num_str, ruler in compute_house_rulers(chart).items():
         if chart["houses"].get(num_str) is not None:
             chart["houses"][num_str]["ruler"] = ruler
+
+    # Major asteroids: Ceres, Pallas, Juno, Vesta via swisseph (needs chart["houses"])
+    try:
+        import os, swisseph as _swe, kerykeion as _kery, pytz as _pytz
+        from datetime import datetime as _dt
+        _swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+        _tz = _pytz.timezone(tz_str or "UTC")
+        _local = _tz.localize(_dt(birth_year, birth_month, birth_day, birth_hour, birth_minute))
+        _utc = _local.astimezone(_pytz.UTC)
+        _jd = _swe.julday(_utc.year, _utc.month, _utc.day,
+                          _utc.hour + _utc.minute / 60.0 + _utc.second / 3600.0)
+        for _ast_name, _ast_id in _ASTEROID_IDS.items():
+            chart[_ast_name] = _compute_asteroid_pos(_jd, _ast_id, chart["houses"])
+    except Exception:
+        for _ast_name in _ASTEROID_IDS:
+            chart[_ast_name] = None
 
     # Natal lunar phase, Part of Fortune, stelliums, mutual receptions
     chart["lunar_phase"] = compute_lunar_phase(chart)

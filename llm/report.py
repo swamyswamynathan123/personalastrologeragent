@@ -185,6 +185,25 @@ def _format_part_of_fortune(pof: dict | None) -> str:
     return f"- {pof['sign']} {pof['position']}°{dignity} ({chart_type} chart formula)"
 
 
+def _format_asteroids(chart: dict) -> str:
+    meta = {
+        "ceres":  ("Ceres",  "nurturing style, loss and return cycles, relationship with sustenance and the body"),
+        "pallas": ("Pallas", "pattern recognition, strategic wisdom, creative intelligence, justice orientation"),
+        "juno":   ("Juno",   "partnership needs, commitment style, what is sought and given in long-term bonds"),
+        "vesta":  ("Vesta",  "sacred focus, devotion, what the person is willing to sacrifice for, inner flame"),
+    }
+    lines = ["## Major Asteroids"]
+    for key, (label, meaning) in meta.items():
+        d = chart.get(key)
+        if not d:
+            lines.append(f"- {label}: unavailable")
+            continue
+        retro = " (retrograde)" if d.get("retrograde") else ""
+        house = f", House {d['house']}" if d.get("house") else ""
+        lines.append(f"- {label}: {d['sign']} {d['position']}°{retro}{house} — {meaning}")
+    return "\n".join(lines)
+
+
 def _format_arabic_parts(parts: dict) -> str:
     if not parts:
         return "Arabic Parts unavailable."
@@ -513,6 +532,7 @@ def build_prompt(state: "AstrologerState") -> str:
         sect_section = "## Planetary Sect\n" + _format_sect(chart.get("sect") or {})
         lunar_phase_section = "## Natal Lunar Phase\n" + _format_lunar_phase(chart.get("lunar_phase") or {})
         pof_section = "## Part of Fortune\n" + _format_part_of_fortune(chart.get("part_of_fortune"))
+        asteroids_section = _format_asteroids(chart)
         arabic_section = "## Additional Arabic Parts\n" + _format_arabic_parts(chart.get("arabic_parts") or {})
         antiscia_section = "## Antiscia & Contra-Antiscia (1.5° orb)\n" + _format_antiscia(chart.get("antiscia") or [])
         stelliums_section = "## Stelliums\n" + _format_stelliums(chart.get("stelliums") or [])
@@ -533,7 +553,7 @@ def build_prompt(state: "AstrologerState") -> str:
         vedic_section = "## Vedic (Jyotish) Overlay\n" + _format_vedic(chart.get("vedic"))
         chart_section = "\n\n".join([
             placements, anaretic_section, fixed_stars_section, ruler_section, balance_section, sect_section,
-            lunar_phase_section, pof_section, arabic_section, antiscia_section,
+            lunar_phase_section, pof_section, asteroids_section, arabic_section, antiscia_section,
             stelliums_section, receptions_section,
             nodes_section, houses_section,
             aspects_section, patterns_section, transits_section, upcoming_section,
@@ -575,6 +595,10 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Part of Marriage: the sign/area describing relationship style and what is sought in partnership; integrate with the 7th house and Venus for a complete relationship picture
 - Antiscia: two planets in antiscion (summing to 180°) operate as a hidden conjunction — they support and reflect each other across the solstice axis, often appearing as an inexplicable sympathy or talent that standard aspects don't explain. Contra-antiscia (summing to 360°) behave like a hidden opposition — tension and awareness between the two planets. Antiscia connections involving the Sun, Moon, or chart ruler are most significant; name them in the Life Direction section if they involve the Nodes, or in the Overview if they link a luminary to a malefic or benefic.
 - Chiron: long-term wound and healing gift; where it falls shows where serving others becomes possible
+- Ceres: the nurturing axis — sign shows HOW the person gives and receives care; house shows WHERE; retrograde = early deprivation that becomes a fierce gift for nurturing others; Ceres-Moon or Ceres-Venus aspects intensify emotional caretaking
+- Pallas: strategic and creative intelligence; sign shows the flavor of wisdom; house shows the arena; aspects to Mercury or Jupiter amplify pattern-recognition gifts; Pallas strong in the chart often indicates a counselor, strategist, or artist
+- Juno: long-term partnership archetype — NOT just marriage; sign shows the quality sought in equals; house shows where equality or imbalance plays out; hard Juno aspects (square, opposition) to personal planets often correlate with relationship patterns worth naming honestly
+- Vesta: the sacred flame and focused devotion — what the person is willing to sacrifice other things for; retrograde Vesta = a more internalized, private devotion; Vesta conjunct the Ascendant or Midheaven = a life devoted to a calling; integrate with the 6th and 12th houses for service and retreat themes
 - Progressed Sun/Moon: the current psychological chapter and emotional climate
 - Progressed sign change within ±2 years: a threshold event — name the approximate year
 - Solar arc aspects within 1°: concrete external turning points (applying = within ~1 year); distinct from the more interior story of progressions
@@ -775,7 +799,8 @@ def build_synastry_prompt(
     name_b: str, dob_b: str, loc_b: str, chart_b: dict,
     synastry: dict,
 ) -> str:
-    key_placements = ["sun", "moon", "ascendant", "midheaven", "venus", "mars", "mercury", "jupiter", "saturn"]
+    key_placements = ["sun", "moon", "ascendant", "midheaven", "venus", "mars", "mercury", "jupiter", "saturn",
+                      "chiron", "ceres", "juno", "vesta", "pallas"]
 
     section_a = "\n".join([
         f"## {name_a}'s Chart (Person A) — born {dob_a}, {loc_a}",
