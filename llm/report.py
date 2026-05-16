@@ -711,6 +711,208 @@ def answer_followup_stream(state: "AstrologerState", chat_history: list[dict], q
                 yield content
 
 
+def _fmt_syn_planet(label: str, chart: dict, key: str) -> str:
+    d = chart.get(key)
+    if not d:
+        return f"- {label}: unavailable"
+    retro = " (Rx)" if d.get("retrograde") else ""
+    dignity = f" [{d['dignity']}]" if d.get("dignity") else ""
+    house = f", H{d['house']}" if d.get("house") else ""
+    return f"- {label}: {d['sign']} {d['position']}°{retro}{dignity}{house}"
+
+
+def _format_cross_aspects(aspects: list[dict], name_a: str, name_b: str) -> str:
+    if not aspects:
+        return "No major inter-chart aspects within 6° orb."
+    lines = []
+    for a in aspects[:30]:  # cap at 30 for prompt length
+        pa = a["planet_a"].replace("_", " ").title()
+        pb = a["planet_b"].replace("_", " ").title()
+        direction = "applying" if a.get("applying") else "separating"
+        lines.append(f"- {name_a}'s {pa} {a['aspect']} {name_b}'s {pb} (orb {a['orb']}°, {direction})")
+    return "\n".join(lines)
+
+
+def _format_house_overlays(overlays: list[dict], guest_name: str, host_name: str) -> str:
+    if not overlays:
+        return "House overlay data unavailable."
+    lines = []
+    key_planets = {"sun", "moon", "venus", "mars", "ascendant", "mercury", "jupiter", "saturn"}
+    for o in overlays:
+        if o["planet"] not in key_planets:
+            continue
+        p = o["planet"].replace("_", " ").title()
+        lines.append(f"- {guest_name}'s {p} ({o['sign']}) falls in {host_name}'s House {o['house_in_partner']}")
+    return "\n".join(lines)
+
+
+def _format_composite(composite: dict, aspects: list[dict]) -> str:
+    if not composite:
+        return "Composite chart unavailable."
+    lines = ["(Midpoint composite — the relationship as its own entity)"]
+    for key, label in [
+        ("sun", "Composite Sun"), ("moon", "Composite Moon"),
+        ("ascendant", "Composite Ascendant"), ("venus", "Composite Venus"),
+        ("mars", "Composite Mars"), ("saturn", "Composite Saturn"),
+        ("midheaven", "Composite Midheaven"),
+    ]:
+        d = composite.get(key)
+        if d:
+            dignity = f" [{d['dignity']}]" if d.get("dignity") else ""
+            lines.append(f"- {label}: {d['sign']} {d['position']}°{dignity}")
+    # Top composite aspects
+    if aspects:
+        lines.append("\nComposite aspects (top 8):")
+        for a in aspects[:8]:
+            p1 = a["planet1"].replace("_", " ").title()
+            p2 = a["planet2"].replace("_", " ").title()
+            lines.append(f"- {p1} {a['aspect']} {p2} (orb {a['orb']}°)")
+    return "\n".join(lines)
+
+
+def build_synastry_prompt(
+    name_a: str, dob_a: str, loc_a: str, chart_a: dict,
+    name_b: str, dob_b: str, loc_b: str, chart_b: dict,
+    synastry: dict,
+) -> str:
+    key_placements = ["sun", "moon", "ascendant", "midheaven", "venus", "mars", "mercury", "jupiter", "saturn"]
+
+    section_a = "\n".join([
+        f"## {name_a}'s Chart (Person A) — born {dob_a}, {loc_a}",
+        *[_fmt_syn_planet(k.capitalize(), chart_a, k) for k in key_placements],
+    ])
+    section_b = "\n".join([
+        f"## {name_b}'s Chart (Person B) — born {dob_b}, {loc_b}",
+        *[_fmt_syn_planet(k.capitalize(), chart_b, k) for k in key_placements],
+    ])
+    cross_section = (
+        f"## Inter-Chart Aspects (A ↔ B, 6° orb)\n"
+        + _format_cross_aspects(synastry.get("cross_aspects") or [], name_a, name_b)
+    )
+    overlay_ba = (
+        f"## House Overlays — {name_b}'s planets in {name_a}'s houses\n"
+        + _format_house_overlays(synastry.get("house_overlays_b_in_a") or [], name_b, name_a)
+    )
+    overlay_ab = (
+        f"## House Overlays — {name_a}'s planets in {name_b}'s houses\n"
+        + _format_house_overlays(synastry.get("house_overlays_a_in_b") or [], name_a, name_b)
+    )
+    comp_section = (
+        "## Composite Chart\n"
+        + _format_composite(synastry.get("composite") or {}, synastry.get("composite_aspects") or [])
+    )
+
+    return f"""You are a master relationship astrologer writing a synastry compatibility reading for {name_a} and {name_b}.
+
+Use only the chart data provided. Do NOT invent aspects, placements, or positions not listed below.
+
+{section_a}
+
+{section_b}
+
+{cross_section}
+
+{overlay_ba}
+
+{overlay_ab}
+
+{comp_section}
+
+## Reference: Synastry Interpretation Rules
+- Sun-Moon inter-aspects are the most fundamental compatibility signature — they show whether the two life forces naturally support each other
+- Venus-Mars inter-aspects describe physical attraction and desire; Venus-Venus shows aesthetic harmony; Moon-Moon shows instinctive emotional resonance
+- Saturn cross-aspects (Saturn conjunct/square/opposite a personal planet) show where one person disciplines or restricts the other — challenging but stabilizing if handled consciously
+- Outer planet cross-aspects (Uranus, Neptune, Pluto to personal planets) are generational and often feel fated or overwhelming — name what they activate without catastrophizing
+- House overlays: where the guest planet falls is the area of the host's life most activated by the relationship. B's Sun in A's 7th = the relationship feels like a partnership archetype for A; B's Moon in A's 4th = emotional domesticity; B's Venus in A's 5th = romance and play
+- Composite chart = the relationship's own natal chart. Composite Sun and Moon show the relationship's identity and emotional core; composite Saturn shows where it needs discipline and structure; composite Venus shows its pleasures; challenging composite aspects describe the relationship's own growth edges
+- Rank aspects by significance: Sun/Moon/ASC inter-aspects first, Venus-Mars second, Mercury communication third, Saturn structural fourth, outer planets last
+- Be honest about tensions — a hard Saturn square is a real challenge, not a blessing in disguise; frame it constructively but truthfully
+
+## Report Instructions
+Speak to both people together ("you two", "between you", "in this connection"). Every paragraph must cite at least one specific planet, sign, degree, or house from the data. Do not list aspects mechanically — weave them into interpretive statements.
+
+Write these 6 sections:
+
+**1. The Connection at a Glance**
+2–3 sentences summarizing the dominant quality of this synastry. What is the single most striking aspect or pattern? What archetype best describes this connection?
+
+**2. How You Experience Each Other**
+Use house overlays. Where do each person's key planets (Sun, Moon, Venus) land in the other's chart? What areas of life does each person illuminate or activate for the other?
+
+**3. Attraction, Chemistry & Emotional Resonance**
+Lead with Sun-Moon, Moon-Moon, and Venus-Mars inter-aspects. What draws these two together instinctively? What does emotional attunement look like between them?
+
+**4. Communication, Growth & Long-Term Compatibility**
+Mercury aspects for communication style match. Jupiter aspects for where they inspire each other. Saturn cross-aspects for the relationship's structure, stability, and growth edges — name any Saturn tensions honestly.
+
+**5. The Relationship as Its Own Entity**
+Read the composite chart: composite Sun + Moon sign/house as the relationship's identity and emotional tone. Any composite aspect patterns or strongly dignified/debilitated composite planets as defining qualities of the bond.
+
+**6. Strengths & Growth Edges**
+2–3 concrete strengths supported by the data. 1–2 honest growth edges (challenges this connection will need to navigate consciously). End with a grounding statement about what makes this connection meaningful, whatever its form.
+"""
+
+
+def generate_synastry_report(
+    name_a: str, dob_a: str, loc_a: str, chart_a: dict,
+    name_b: str, dob_b: str, loc_b: str, chart_b: dict,
+    synastry: dict,
+) -> str:
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    prompt = build_synastry_prompt(name_a, dob_a, loc_a, chart_a, name_b, dob_b, loc_b, chart_b, synastry)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=3000,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a master relationship astrologer who reads synastry with psychological depth and compassion. "
+                    "You balance honesty about challenges with genuine recognition of gifts. You never catastrophize "
+                    "difficult aspects, and you never oversell easy ones. Every statement is grounded in specific "
+                    "chart data. You speak warmly and directly to the people, not about them."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+    )
+    return response.choices[0].message.content
+
+
+def answer_synastry_followup_stream(
+    name_a: str, dob_a: str, chart_a: dict,
+    name_b: str, dob_b: str, chart_b: dict,
+    synastry: dict, synastry_report: str,
+    chat_history: list[dict], question: str,
+):
+    """Streaming follow-up for synastry questions."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    cross = _format_cross_aspects(synastry.get("cross_aspects") or [], name_a, name_b)
+    comp = _format_composite(synastry.get("composite") or {}, synastry.get("composite_aspects") or [])
+    system = (
+        f"You are a master relationship astrologer. You have already written a synastry reading for "
+        f"{name_a} (born {dob_a}) and {name_b} (born {dob_b}).\n\n"
+        f"Key inter-chart aspects:\n{cross}\n\n"
+        f"Composite chart:\n{comp}\n\n"
+        "Answer follow-up questions by reasoning from the chart data above. "
+        "Cite specific planets, signs, and houses. Be warm, direct, and grounded in the data. "
+        "Do NOT invent aspects or placements not listed above."
+    )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "assistant", "content": synastry_report},
+        *chat_history,
+        {"role": "user", "content": question},
+    ]
+    with client.chat.completions.create(
+        model="gpt-4o", max_tokens=1024, stream=True, messages=messages
+    ) as stream:
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield content
+
+
 def generate_report(state: "AstrologerState") -> str:
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 

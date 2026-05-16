@@ -1585,6 +1585,132 @@ def compute_transits(
     return transits
 
 
+_SYNASTRY_ORB = 6.0  # tighter than natal for inter-chart aspects
+
+# Priority order for sorting synastry aspects by significance
+_SYNASTRY_PRIORITY = {
+    "sun": 0, "moon": 1, "ascendant": 2, "venus": 3, "mars": 4,
+    "midheaven": 5, "mercury": 6, "jupiter": 7, "saturn": 8,
+    "uranus": 9, "neptune": 10, "pluto": 11, "chiron": 12,
+    "north_node": 13,
+}
+
+
+def compute_synastry(chart_a: dict, chart_b: dict) -> dict:
+    """
+    Compare two natal charts for synastry analysis.
+    Returns cross-aspects, house overlays (both directions), and composite midpoint chart.
+    """
+    # Collect body positions for both charts
+    def _bodies(chart: dict) -> dict[str, tuple[float, bool]]:
+        out: dict[str, tuple[float, bool]] = {}
+        for planet in _PLANETS:
+            d = chart.get(planet)
+            if d and d.get("abs_pos") is not None:
+                out[planet] = (d["abs_pos"], d.get("retrograde", False))
+        for key in ("ascendant", "midheaven"):
+            d = chart.get(key)
+            if d and d.get("abs_pos") is not None:
+                out[key] = (d["abs_pos"], False)
+        chiron = chart.get("chiron")
+        if chiron and chiron.get("abs_pos") is not None:
+            out["chiron"] = (chiron["abs_pos"], chiron.get("retrograde", False))
+        nn = chart.get("north_node")
+        if nn and nn.get("abs_pos") is not None:
+            out["north_node"] = (nn["abs_pos"], False)
+        return out
+
+    bodies_a = _bodies(chart_a)
+    bodies_b = _bodies(chart_b)
+
+    # ── Cross-aspects (A ↔ B) ─────────────────────────────────────────────
+    cross_aspects: list[dict] = []
+    for p_a, (pos_a, retro_a) in bodies_a.items():
+        for p_b, (pos_b, retro_b) in bodies_b.items():
+            result = _find_aspect(pos_a, pos_b, max_orb=_SYNASTRY_ORB)
+            if not result:
+                continue
+            aspect_name, orb = result
+            exact_angle = next(a for nm, a, _ in _MAJOR_ASPECTS if nm == aspect_name)
+            applying = _is_applying(p_a, pos_a, retro_a, p_b, pos_b, retro_b, exact_angle)
+            cross_aspects.append({
+                "planet_a": p_a, "planet_b": p_b,
+                "aspect": aspect_name, "orb": orb, "applying": applying,
+            })
+
+    cross_aspects.sort(key=lambda x: (
+        min(_SYNASTRY_PRIORITY.get(x["planet_a"], 14), _SYNASTRY_PRIORITY.get(x["planet_b"], 14)),
+        x["orb"],
+    ))
+
+    # ── House overlays — B's planets in A's whole-sign houses ────────────
+    def _overlays(chart_host: dict, bodies_guest: dict[str, tuple[float, bool]]) -> list[dict]:
+        asc = chart_host.get("ascendant")
+        if not asc or asc.get("abs_pos") is None:
+            return []
+        host_lagna_idx = int(asc["abs_pos"] / 30) % 12
+        overlays = []
+        for planet, (pos, _) in bodies_guest.items():
+            sign_idx = int(pos / 30) % 12
+            house_num = ((sign_idx - host_lagna_idx) % 12) + 1
+            overlays.append({
+                "planet": planet,
+                "sign": _SIGNS[sign_idx],
+                "house_in_partner": house_num,
+            })
+        overlays.sort(key=lambda x: _SYNASTRY_PRIORITY.get(x["planet"], 14))
+        return overlays
+
+    house_overlays_b_in_a = _overlays(chart_a, bodies_b)
+    house_overlays_a_in_b = _overlays(chart_b, bodies_a)
+
+    # ── Composite chart (midpoint method) ────────────────────────────────
+    def _midpoint(pos_a: float, pos_b: float) -> float:
+        diff = (pos_b - pos_a) % 360
+        if diff > 180:
+            return (pos_a + (360 - diff) / 2) % 360
+        return (pos_a + diff / 2) % 360
+
+    composite: dict = {}
+    for body in list(_PLANETS) + ["ascendant", "midheaven", "chiron", "north_node"]:
+        a_data = chart_a.get(body)
+        b_data = chart_b.get(body)
+        if not a_data or not b_data:
+            continue
+        if a_data.get("abs_pos") is None or b_data.get("abs_pos") is None:
+            continue
+        mid = _midpoint(a_data["abs_pos"], b_data["abs_pos"])
+        sign, pos = _sign_from_abs_pos(mid)
+        entry: dict = {"abs_pos": round(mid, 2), "sign": sign, "position": round(pos, 2)}
+        dignity = _get_dignity(body, sign)
+        if dignity:
+            entry["dignity"] = dignity
+        composite[body] = entry
+
+    # Composite aspects (internal aspects within the composite chart)
+    composite_aspects: list[dict] = []
+    comp_bodies = {k: (v["abs_pos"], False) for k, v in composite.items() if v.get("abs_pos") is not None}
+    comp_list = list(comp_bodies.items())
+    for i, (p1, (pos1, _)) in enumerate(comp_list):
+        for p2, (pos2, _) in comp_list[i + 1:]:
+            result = _find_aspect(pos1, pos2)
+            if result:
+                aspect_name, orb = result
+                composite_aspects.append({"planet1": p1, "planet2": p2, "aspect": aspect_name, "orb": orb})
+    composite_aspects.sort(key=lambda x: (
+        min(_SYNASTRY_PRIORITY.get(x["planet1"], 14), _SYNASTRY_PRIORITY.get(x["planet2"], 14)),
+        x["orb"],
+    ))
+
+    return {
+        "cross_aspects": cross_aspects,
+        "house_overlays_b_in_a": house_overlays_b_in_a,
+        "house_overlays_a_in_b": house_overlays_a_in_b,
+        "composite": composite,
+        "composite_aspects": composite_aspects,
+    }
+
+
 def compute_arabic_parts(chart: dict) -> dict:
     """
     Compute classical Arabic Parts (Lots) beyond Fortune.
