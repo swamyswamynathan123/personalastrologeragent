@@ -19,6 +19,28 @@ def _format_planet(label: str, data: dict | None) -> str:
     return f"- {label}: {data['sign']} {data['position']}°{retro}{house}"
 
 
+def _format_aspects(aspects: list[dict]) -> str:
+    if not aspects:
+        return "No major natal aspects computed."
+    lines = []
+    for a in aspects:
+        p1 = a["planet1"].capitalize()
+        p2 = a["planet2"].capitalize()
+        lines.append(f"- {p1} {a['aspect']} {p2} (orb {a['orb']}°)")
+    return "\n".join(lines)
+
+
+def _format_transits(transits: list[dict]) -> str:
+    if not transits:
+        return "No significant transits active right now (within 3° orb)."
+    lines = []
+    for t in transits:
+        tp = t["transiting_planet"].capitalize()
+        np_ = t["natal_planet"].capitalize()
+        lines.append(f"- Transiting {tp} {t['aspect']} natal {np_} (orb {t['orb']}°)")
+    return "\n".join(lines)
+
+
 def build_prompt(state: "AstrologerState") -> str:
     chart = state.get("chart_data") or {}
     focus = state.get("report_focus") or "general life reading"
@@ -26,7 +48,7 @@ def build_prompt(state: "AstrologerState") -> str:
 
     chart_section = ""
     if chart:
-        lines = [
+        placements = [
             "## Natal Chart Placements",
             _format_planet("Sun", chart.get("sun")),
             _format_planet("Moon", chart.get("moon")),
@@ -41,7 +63,9 @@ def build_prompt(state: "AstrologerState") -> str:
             _format_planet("Neptune", chart.get("neptune")),
             _format_planet("Pluto", chart.get("pluto")),
         ]
-        chart_section = "\n".join(lines)
+        aspects_section = ["", "## Natal Aspects", _format_aspects(chart.get("aspects") or [])]
+        transits_section = ["", "## Current Transits (as of report date)", _format_transits(chart.get("transits") or [])]
+        chart_section = "\n".join(placements + aspects_section + transits_section)
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
 
@@ -80,16 +104,22 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
     chart = state.get("chart_data") or {}
-    chart_summary = "\n".join([
-        _format_planet("Sun", chart.get("sun")),
-        _format_planet("Moon", chart.get("moon")),
-        _format_planet("Mercury", chart.get("mercury")),
-        _format_planet("Venus", chart.get("venus")),
-        _format_planet("Mars", chart.get("mars")),
-        _format_planet("Jupiter", chart.get("jupiter")),
-        _format_planet("Saturn", chart.get("saturn")),
-        f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
-    ]) if chart else "Natal chart data unavailable."
+    if chart:
+        placements = "\n".join([
+            _format_planet("Sun", chart.get("sun")),
+            _format_planet("Moon", chart.get("moon")),
+            _format_planet("Mercury", chart.get("mercury")),
+            _format_planet("Venus", chart.get("venus")),
+            _format_planet("Mars", chart.get("mars")),
+            _format_planet("Jupiter", chart.get("jupiter")),
+            _format_planet("Saturn", chart.get("saturn")),
+            f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
+        ])
+        aspects_text = _format_aspects(chart.get("aspects") or [])
+        transits_text = _format_transits(chart.get("transits") or [])
+        chart_summary = f"{placements}\n\nNatal Aspects:\n{aspects_text}\n\nCurrent Transits:\n{transits_text}"
+    else:
+        chart_summary = "Natal chart data unavailable."
 
     system = (
         f"You are an expert Western astrologer. You have already provided a full reading for "
