@@ -18,9 +18,11 @@ _PLANET_SPEEDS = {
     "moon": 13.2, "mercury": 1.38, "venus": 1.2, "sun": 0.985,
     "mars": 0.524, "jupiter": 0.083, "saturn": 0.034,
     "uranus": 0.012, "neptune": 0.006, "pluto": 0.004,
-    "north_node": 0.053,
+    "chiron": 0.02, "north_node": 0.053,
     "ascendant": 0.0, "midheaven": 0.0,
 }
+
+_PROGRESSED_ORB = 1.0  # 1° = ~1 year for the progressed Sun
 
 _SIGNS = [
     "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
@@ -257,13 +259,64 @@ def compute_progressions(
     progressed["ascendant"] = {
         "sign": getattr(first, "sign", None),
         "position": round(getattr(first, "position", 0.0), 2),
+        "abs_pos": round(getattr(first, "abs_pos", 0.0), 2),
     } if first else None
     progressed["midheaven"] = {
         "sign": getattr(tenth, "sign", None),
         "position": round(getattr(tenth, "position", 0.0), 2),
+        "abs_pos": round(getattr(tenth, "abs_pos", 0.0), 2),
     } if tenth else None
 
     return progressed
+
+
+def compute_progressed_aspects(natal_chart: dict, progressions: dict) -> list[dict]:
+    """Compute aspects between progressed planets and natal chart points (1° orb)."""
+    # Progressed bodies
+    prog_bodies: dict[str, tuple[float, bool]] = {}
+    for key in ["sun", "moon", "mercury", "venus", "mars"]:
+        data = progressions.get(key)
+        if data and data.get("abs_pos") is not None:
+            prog_bodies[f"progressed_{key}"] = (data["abs_pos"], data.get("retrograde", False))
+    for key in ["ascendant", "midheaven"]:
+        data = progressions.get(key)
+        if data and data.get("abs_pos") is not None:
+            prog_bodies[f"progressed_{key}"] = (data["abs_pos"], False)
+
+    # Natal reference points
+    natal_bodies: dict[str, float] = {}
+    for planet in _PLANETS:
+        data = natal_chart.get(planet)
+        if data and data.get("abs_pos") is not None:
+            natal_bodies[planet] = data["abs_pos"]
+    chiron = natal_chart.get("chiron")
+    if chiron and chiron.get("abs_pos") is not None:
+        natal_bodies["chiron"] = chiron["abs_pos"]
+    for key in ("ascendant", "midheaven"):
+        data = natal_chart.get(key)
+        if data and data.get("abs_pos") is not None:
+            natal_bodies[key] = data["abs_pos"]
+    nn = natal_chart.get("north_node")
+    if nn and nn.get("abs_pos") is not None:
+        natal_bodies["north_node"] = nn["abs_pos"]
+
+    aspects = []
+    for prog_name, (prog_pos, prog_retro) in prog_bodies.items():
+        for natal_name, natal_pos in natal_bodies.items():
+            result = _find_aspect(prog_pos, natal_pos, max_orb=_PROGRESSED_ORB)
+            if result:
+                aspect_name, orb = result
+                exact_angle = next(a for n, a, _ in _MAJOR_ASPECTS if n == aspect_name)
+                base_name = prog_name.replace("progressed_", "")
+                applying = _is_applying(base_name, prog_pos, prog_retro, natal_name, natal_pos, False, exact_angle)
+                aspects.append({
+                    "progressed_planet": prog_name,
+                    "natal_planet": natal_name,
+                    "aspect": aspect_name,
+                    "orb": orb,
+                    "applying": applying,
+                })
+    return aspects
 
 
 def compute_aspects(chart: dict) -> list[dict]:
@@ -276,6 +329,9 @@ def compute_aspects(chart: dict) -> list[dict]:
         data = chart.get(key)
         if data and data.get("abs_pos") is not None:
             bodies[key] = (data["abs_pos"], False)
+    chiron_data = chart.get("chiron")
+    if chiron_data and chiron_data.get("abs_pos") is not None:
+        bodies["chiron"] = (chiron_data["abs_pos"], chiron_data.get("retrograde", False))
     nn = chart.get("north_node")
     if nn and nn.get("abs_pos") is not None:
         bodies["north_node"] = (nn["abs_pos"], nn.get("retrograde", False))
@@ -363,6 +419,14 @@ def compute_chart(
         "position": round(getattr(tenth, "position", 0.0), 2),
         "abs_pos": round(getattr(tenth, "abs_pos", 0.0), 2),
     } if tenth else None
+
+    # Chiron
+    chiron = _safe_planet(subject, "chiron")
+    if chiron and chiron.get("sign"):
+        dignity = _get_dignity("chiron", chiron["sign"])
+        if dignity:
+            chiron["dignity"] = dignity
+    chart["chiron"] = chiron
 
     # North Node and computed South Node
     north_node = _safe_planet(subject, "mean_node")

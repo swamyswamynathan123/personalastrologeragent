@@ -109,7 +109,7 @@ def normalize_and_parse(state: "AstrologerState") -> dict:
 def compute_astro(state: "AstrologerState") -> dict:
     """Node 5 (optional): Compute natal chart via kerykeion. Gracefully degrades on failure."""
     try:
-        from astro.compute import compute_chart, compute_aspects, compute_transits, compute_progressions
+        from astro.compute import compute_chart, compute_aspects, compute_transits, compute_progressions, compute_progressed_aspects
 
         birth_dt = datetime.fromisoformat(state["parsed_birth_datetime"])
         location_parts = [p.strip() for p in state["birth_location"].split(",")]
@@ -166,6 +166,14 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["progressions"] = None
+
+        try:
+            if chart.get("progressions"):
+                chart["progressed_aspects"] = compute_progressed_aspects(chart, chart["progressions"])
+            else:
+                chart["progressed_aspects"] = []
+        except Exception:
+            chart["progressed_aspects"] = []
 
         return {"chart_data": chart}
     except Exception:

@@ -120,6 +120,18 @@ def _format_houses(houses: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_progressed_aspects(prog_aspects: list[dict]) -> str:
+    if not prog_aspects:
+        return "No progressed aspects within 1° orb of natal chart points."
+    lines = []
+    for a in prog_aspects:
+        pp = a["progressed_planet"].replace("_", " ").title()
+        np_ = a["natal_planet"].replace("_", " ").title()
+        direction = "applying" if a.get("applying") else "separating"
+        lines.append(f"- {pp} {a['aspect']} natal {np_} (orb {a['orb']}°, {direction})")
+    return "\n".join(lines)
+
+
 def _format_progressions(prog: dict | None) -> str:
     if not prog:
         return "Secondary progressions unavailable."
@@ -164,6 +176,7 @@ def build_prompt(state: "AstrologerState") -> str:
             _format_planet("Uranus", chart.get("uranus")),
             _format_planet("Neptune", chart.get("neptune")),
             _format_planet("Pluto", chart.get("pluto")),
+            _format_planet("Chiron", chart.get("chiron")),
         ])
         ruler_section = "## Chart Ruler\n" + _format_chart_ruler(chart.get("chart_ruler"))
         balance_section = "## Elemental & Modal Balance\n" + _format_balance(chart.get("balance") or {})
@@ -172,7 +185,8 @@ def build_prompt(state: "AstrologerState") -> str:
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
         progressions_section = "## Secondary Progressions\n" + _format_progressions(chart.get("progressions"))
-        chart_section = "\n\n".join([placements, ruler_section, balance_section, nodes_section, houses_section, aspects_section, transits_section, progressions_section])
+        prog_aspects_section = "## Progressed Aspects to Natal Chart\n" + _format_progressed_aspects(chart.get("progressed_aspects") or [])
+        chart_section = "\n\n".join([placements, ruler_section, balance_section, nodes_section, houses_section, aspects_section, transits_section, progressions_section, prog_aspects_section])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
 
@@ -186,6 +200,8 @@ Dignity levels: domicile (strongest) > exaltation (strong) > no dignity (neutral
 For aspects: applying aspects (planets still moving toward exact) are currently intensifying; separating aspects are past their peak and more ingrained.
 Use the elemental and modal balance to characterise overall temperament before interpreting individual placements.
 Progressed Sun and Moon show the current life phase; a progressed sign change is a major threshold event worth highlighting.
+Chiron represents core wounds and healing gifts; interpret its sign, house, and aspects as long-term soul work.
+Progressed aspects to natal planets (1° orb) mark pivotal turning points — applying ones are currently activating.
 
 ## Person Details
 - **Full Name:** {state['full_name']}
@@ -226,6 +242,7 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
             _format_planet("Mars", chart.get("mars")),
             _format_planet("Jupiter", chart.get("jupiter")),
             _format_planet("Saturn", chart.get("saturn")),
+            _format_planet("Chiron", chart.get("chiron")),
             f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
         ])
         nodes_text = _format_nodes(chart)
@@ -233,12 +250,14 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         aspects_text = _format_aspects(chart.get("aspects") or [])
         transits_text = _format_transits(chart.get("transits") or [])
         prog_text = _format_progressions(chart.get("progressions"))
+        prog_aspects_text = _format_progressed_aspects(chart.get("progressed_aspects") or [])
         chart_summary = (
             f"{placements}\n\nChart Ruler:\n{ruler_text}"
             f"\n\nLunar Nodes:\n{nodes_text}"
             f"\n\nNatal Aspects:\n{aspects_text}"
             f"\n\nCurrent Transits:\n{transits_text}"
             f"\n\nSecondary Progressions:\n{prog_text}"
+            f"\n\nProgressed Aspects to Natal:\n{prog_aspects_text}"
         )
     else:
         chart_summary = "Natal chart data unavailable."
