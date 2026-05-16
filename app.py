@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 
 from agent.graph import graph
 from agent.state import AstrologerState
-from llm.report import answer_followup_stream
+from llm.report import answer_followup_stream, generate_synastry_report, answer_synastry_followup_stream
+from astro.compute import compute_chart, compute_synastry
 
 load_dotenv()
 
@@ -178,6 +179,12 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "validation_message" not in st.session_state:
     st.session_state.validation_message = None
+if "synastry_result" not in st.session_state:
+    st.session_state.synastry_result = None
+if "synastry_chat_history" not in st.session_state:
+    st.session_state.synastry_chat_history = []
+if "synastry_error" not in st.session_state:
+    st.session_state.synastry_error = None
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
@@ -278,84 +285,87 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-if st.session_state.validation_message == "__error__":
-    st.error("An unexpected error occurred. Please try again.")
+natal_tab, synastry_tab = st.tabs(["My Reading", "Compatibility / Synastry"])
 
-elif st.session_state.validation_message:
-    st.warning("Please correct the following before your reading can be generated:")
-    st.markdown(st.session_state.validation_message)
+with natal_tab:
+    if st.session_state.validation_message == "__error__":
+        st.error("An unexpected error occurred. Please try again.")
 
-elif st.session_state.report_result:
-    result = st.session_state.report_result
+    elif st.session_state.validation_message:
+        st.warning("Please correct the following before your reading can be generated:")
+        st.markdown(st.session_state.validation_message)
 
-    # Metadata strip
-    col_a, col_b, col_c, col_d = st.columns(4)
-    with col_a:
-        st.metric("Name", result["full_name"])
-    with col_b:
-        st.metric("Date of Birth", result["parsed_dob"])
-    with col_c:
-        st.metric("Birth Location", result["birth_location"])
-    with col_d:
-        st.metric("Current Location", result["current_location"])
+    elif st.session_state.report_result:
+        result = st.session_state.report_result
 
-    st.caption(f"Reading generated as of {result['parsed_current_datetime']}")
-    st.divider()
+        # Metadata strip
+        col_a, col_b, col_c, col_d = st.columns(4)
+        with col_a:
+            st.metric("Name", result["full_name"])
+        with col_b:
+            st.metric("Date of Birth", result["parsed_dob"])
+        with col_c:
+            st.metric("Birth Location", result["birth_location"])
+        with col_d:
+            st.metric("Current Location", result["current_location"])
 
-    # Chart wheels (natal + transit overlay)
-    chart_svg = (result.get("chart_data") or {}).get("chart_svg") or ""
-    transit_svg = (result.get("chart_data") or {}).get("transit_svg") or ""
-    if chart_svg or transit_svg:
-        _svg_style = (
-            "background:#ffffff;border-radius:12px;padding:1.2rem 1rem;"
-            "display:flex;justify-content:center;overflow:auto;"
-        )
-        tab_labels = []
-        if chart_svg:
-            tab_labels.append("Natal Chart")
-        if transit_svg:
-            tab_labels.append("Transit Overlay")
-        chart_tabs = st.tabs(tab_labels)
-        tab_idx = 0
-        if chart_svg:
-            with chart_tabs[tab_idx]:
-                st.markdown(
-                    f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
-                    unsafe_allow_html=True,
-                )
-                st.download_button(
-                    "Download Natal SVG", data=chart_svg,
-                    file_name=f"natal_{result['full_name'].replace(' ', '_')}.svg",
-                    mime="image/svg+xml",
-                )
-            tab_idx += 1
-        if transit_svg:
-            with chart_tabs[tab_idx]:
-                st.markdown(
-                    f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
-                    unsafe_allow_html=True,
-                )
-                st.download_button(
-                    "Download Transit SVG", data=transit_svg,
-                    file_name=f"transit_{result['full_name'].replace(' ', '_')}.svg",
-                    mime="image/svg+xml",
-                )
+        st.caption(f"Reading generated as of {result['parsed_current_datetime']}")
         st.divider()
 
-    # Report rendered in a styled card
-    st.markdown(
-        f'<div class="report-card">{result["final_report"]}</div>',
-        unsafe_allow_html=True,
-    )
+        # Chart wheels (natal + transit overlay)
+        chart_svg = (result.get("chart_data") or {}).get("chart_svg") or ""
+        transit_svg = (result.get("chart_data") or {}).get("transit_svg") or ""
+        if chart_svg or transit_svg:
+            _svg_style = (
+                "background:#ffffff;border-radius:12px;padding:1.2rem 1rem;"
+                "display:flex;justify-content:center;overflow:auto;"
+            )
+            tab_labels = []
+            if chart_svg:
+                tab_labels.append("Natal Chart")
+            if transit_svg:
+                tab_labels.append("Transit Overlay")
+            chart_tabs = st.tabs(tab_labels)
+            tab_idx = 0
+            if chart_svg:
+                with chart_tabs[tab_idx]:
+                    st.markdown(
+                        f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.download_button(
+                        "Download Natal SVG", data=chart_svg,
+                        file_name=f"natal_{result['full_name'].replace(' ', '_')}.svg",
+                        mime="image/svg+xml",
+                    )
+                tab_idx += 1
+            if transit_svg:
+                with chart_tabs[tab_idx]:
+                    st.markdown(
+                        f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.download_button(
+                        "Download Transit SVG", data=transit_svg,
+                        file_name=f"transit_{result['full_name'].replace(' ', '_')}.svg",
+                        mime="image/svg+xml",
+                    )
+            st.divider()
 
-    # Downloads
-    import markdown as _md
-    _report_html_body = _md.markdown(result["final_report"], extensions=["extra"])
-    _chart_svg_block = (
-        f'<div style="display:flex;justify-content:center;margin:1.5rem 0;">'
-        f'<div style="max-width:560px;">{chart_svg}</div></div>'
-    ) if chart_svg else ""
-    _html_export = f"""<!DOCTYPE html>
+        # Report rendered in a styled card
+        st.markdown(
+            f'<div class="report-card">{result["final_report"]}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Downloads
+        import markdown as _md
+        _report_html_body = _md.markdown(result["final_report"], extensions=["extra"])
+        _chart_svg_block = (
+            f'<div style="display:flex;justify-content:center;margin:1.5rem 0;">'
+            f'<div style="max-width:560px;">{chart_svg}</div></div>'
+        ) if chart_svg else ""
+        _html_export = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Astrology Reading — {result['full_name']}</title>
 <style>
@@ -373,48 +383,247 @@ elif st.session_state.report_result:
 {_report_html_body}
 </body></html>"""
 
-    dl_col1, dl_col2 = st.columns(2)
-    with dl_col1:
-        st.download_button(
-            label="Download as Markdown",
-            data=result["final_report"],
-            file_name=f"reading_{result['full_name'].replace(' ', '_')}.md",
-            mime="text/markdown",
-        )
-    with dl_col2:
-        st.download_button(
-            label="Download as HTML",
-            data=_html_export,
-            file_name=f"reading_{result['full_name'].replace(' ', '_')}.html",
-            mime="text/html",
-        )
-
-    # Follow-up chat
-    st.divider()
-    st.subheader("💬 Ask a Follow-up Question")
-    st.caption("Ask anything about your chart, placements, timing, or guidance.")
-
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-
-    question = st.chat_input("e.g. What does my Saturn placement mean for my career?")
-    if question:
-        with st.chat_message("user"):
-            st.markdown(question)
-
-        with st.chat_message("assistant"):
-            answer = st.write_stream(
-                answer_followup_stream(result, st.session_state.chat_history, question)
+        dl_col1, dl_col2 = st.columns(2)
+        with dl_col1:
+            st.download_button(
+                label="Download as Markdown",
+                data=result["final_report"],
+                file_name=f"reading_{result['full_name'].replace(' ', '_')}.md",
+                mime="text/markdown",
+            )
+        with dl_col2:
+            st.download_button(
+                label="Download as HTML",
+                data=_html_export,
+                file_name=f"reading_{result['full_name'].replace(' ', '_')}.html",
+                mime="text/html",
             )
 
-        st.session_state.chat_history.append({"role": "user", "content": question})
-        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+        # Follow-up chat
+        st.divider()
+        st.subheader("💬 Ask a Follow-up Question")
+        st.caption("Ask anything about your chart, placements, timing, or guidance.")
 
-else:
-    st.markdown("""
-    <div class="placeholder-panel">
-      <div class="icon">🔭</div>
-      <p>Fill in your birth details in the sidebar<br>and click <strong>Generate My Reading</strong> to begin.</p>
-    </div>
-    """, unsafe_allow_html=True)
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        question = st.chat_input("e.g. What does my Saturn placement mean for my career?")
+        if question:
+            with st.chat_message("user"):
+                st.markdown(question)
+
+            with st.chat_message("assistant"):
+                answer = st.write_stream(
+                    answer_followup_stream(result, st.session_state.chat_history, question)
+                )
+
+            st.session_state.chat_history.append({"role": "user", "content": question})
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+
+    else:
+        st.markdown("""
+        <div class="placeholder-panel">
+          <div class="icon">🔭</div>
+          <p>Fill in your birth details in the sidebar<br>and click <strong>Generate My Reading</strong> to begin.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+with synastry_tab:
+    if not st.session_state.report_result:
+        st.info(
+            "Generate your natal reading first (sidebar → **Generate My Reading**), "
+            "then return here to explore compatibility."
+        )
+    else:
+        result_a = st.session_state.report_result
+        chart_a = result_a.get("chart_data") or {}
+
+        st.markdown("""
+        <div style="padding:0.8rem 0 1rem;">
+          <p style="color:#9988bb;font-style:italic;margin:0;">Enter a second person's birth details to receive a full synastry reading.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(
+            f"**Person A (You):** {result_a['full_name']} · {result_a['parsed_dob']} · {result_a['birth_location']}"
+        )
+
+        with st.form("synastry_form"):
+            st.markdown("#### Person B — Birth Details")
+            b_col1, b_col2 = st.columns(2)
+            with b_col1:
+                b_name = st.text_input("Full Name *", placeholder="e.g., John Smith", key="syn_name")
+                b_dob = st.date_input(
+                    "Date of Birth *", value=None,
+                    min_value=date(1900, 1, 1), max_value=date.today(),
+                    key="syn_dob",
+                )
+                b_birth_time = st.time_input("Birth Time *", value=None, step=60, key="syn_time")
+            with b_col2:
+                b_location = st.text_input(
+                    "Birth Location *", placeholder="City, Region, Country", key="syn_loc"
+                )
+                b_timezone = st.selectbox(
+                    "Birth Timezone *", options=ALL_TIMEZONES, index=DEFAULT_TZ_INDEX, key="syn_tz"
+                )
+
+            syn_submitted = st.form_submit_button(
+                "Explore Compatibility ✨", type="primary", use_container_width=True
+            )
+
+        if syn_submitted:
+            st.session_state.synastry_result = None
+            st.session_state.synastry_chat_history = []
+            st.session_state.synastry_error = None
+
+            b_errors = []
+            if not b_name or not b_name.strip():
+                b_errors.append("Full Name is required.")
+            if not b_dob:
+                b_errors.append("Date of Birth is required.")
+            if not b_birth_time:
+                b_errors.append("Birth Time is required.")
+            if not b_location or not b_location.strip():
+                b_errors.append("Birth Location is required.")
+
+            if b_errors:
+                for err in b_errors:
+                    st.warning(err)
+            else:
+                try:
+                    _tz_b = pytz.timezone(b_timezone)
+                    _b_dt = _tz_b.localize(datetime(
+                        b_dob.year, b_dob.month, b_dob.day,
+                        b_birth_time.hour, b_birth_time.minute,
+                    ))
+                    b_parts = [p.strip() for p in b_location.split(",")]
+                    b_city = b_parts[0]
+                    b_nation = b_parts[-1] if len(b_parts) > 1 else ""
+
+                    with st.spinner("Computing charts and synastry... ✨"):
+                        chart_b = compute_chart(
+                            full_name=b_name.strip(),
+                            birth_year=_b_dt.year,
+                            birth_month=_b_dt.month,
+                            birth_day=_b_dt.day,
+                            birth_hour=_b_dt.hour,
+                            birth_minute=_b_dt.minute,
+                            city=b_city,
+                            nation=b_nation,
+                            tz_str=b_timezone,
+                        )
+                        synastry = compute_synastry(chart_a, chart_b)
+                        syn_report = generate_synastry_report(
+                            name_a=result_a["full_name"],
+                            dob_a=result_a["parsed_dob"],
+                            loc_a=result_a["birth_location"],
+                            chart_a=chart_a,
+                            name_b=b_name.strip(),
+                            dob_b=b_dob.strftime("%Y-%m-%d"),
+                            loc_b=b_location.strip(),
+                            chart_b=chart_b,
+                            synastry=synastry,
+                        )
+
+                    st.session_state.synastry_result = {
+                        "name_a": result_a["full_name"],
+                        "dob_a": result_a["parsed_dob"],
+                        "loc_a": result_a["birth_location"],
+                        "chart_a": chart_a,
+                        "name_b": b_name.strip(),
+                        "dob_b": b_dob.strftime("%Y-%m-%d"),
+                        "loc_b": b_location.strip(),
+                        "chart_b": chart_b,
+                        "synastry": synastry,
+                        "report": syn_report,
+                    }
+                except Exception as exc:
+                    st.session_state.synastry_error = str(exc)
+
+        if st.session_state.synastry_error:
+            st.error(f"An error occurred: {st.session_state.synastry_error}")
+
+        if st.session_state.synastry_result:
+            syn = st.session_state.synastry_result
+
+            st.divider()
+            s_col1, s_col2 = st.columns(2)
+            with s_col1:
+                st.metric("Person A", syn["name_a"])
+                st.caption(f"{syn['dob_a']} · {syn['loc_a']}")
+            with s_col2:
+                st.metric("Person B", syn["name_b"])
+                st.caption(f"{syn['dob_b']} · {syn['loc_b']}")
+            st.divider()
+
+            st.markdown(
+                f'<div class="report-card">{syn["report"]}</div>',
+                unsafe_allow_html=True,
+            )
+
+            # Synastry downloads
+            import markdown as _md2
+            _syn_html_body = _md2.markdown(syn["report"], extensions=["extra"])
+            _syn_html = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Synastry — {syn['name_a']} &amp; {syn['name_b']}</title>
+<style>
+  body{{font-family:Georgia,serif;max-width:820px;margin:0 auto;padding:2rem;color:#1a1a2e;line-height:1.8}}
+  h1{{color:#4a2d7a;border-bottom:2px solid #c8a8f8;padding-bottom:.5rem}}
+  h2{{color:#6644aa;margin-top:2rem}}
+  strong{{color:#4a2d7a}}
+  .meta{{color:#666;font-style:italic;margin-bottom:2rem}}
+</style></head>
+<body>
+<h1>Synastry: {syn['name_a']} &amp; {syn['name_b']}</h1>
+<p class="meta">{syn['name_a']} ({syn['dob_a']}, {syn['loc_a']}) · {syn['name_b']} ({syn['dob_b']}, {syn['loc_b']})</p>
+{_syn_html_body}
+</body></html>"""
+
+            syn_dl1, syn_dl2 = st.columns(2)
+            with syn_dl1:
+                st.download_button(
+                    label="Download as Markdown",
+                    data=syn["report"],
+                    file_name=f"synastry_{syn['name_a'].replace(' ', '_')}_{syn['name_b'].replace(' ', '_')}.md",
+                    mime="text/markdown",
+                )
+            with syn_dl2:
+                st.download_button(
+                    label="Download as HTML",
+                    data=_syn_html,
+                    file_name=f"synastry_{syn['name_a'].replace(' ', '_')}_{syn['name_b'].replace(' ', '_')}.html",
+                    mime="text/html",
+                )
+
+            # Synastry follow-up chat
+            st.divider()
+            st.subheader("💬 Ask About Your Compatibility")
+            st.caption("Ask anything about your synastry, shared themes, or relationship timing.")
+
+            for msg in st.session_state.synastry_chat_history:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+            syn_question = st.chat_input(
+                "e.g. What does our Venus-Mars conjunction mean for romance?",
+                key="syn_chat",
+            )
+            if syn_question:
+                with st.chat_message("user"):
+                    st.markdown(syn_question)
+
+                with st.chat_message("assistant"):
+                    syn_answer = st.write_stream(
+                        answer_synastry_followup_stream(
+                            name_a=syn["name_a"], dob_a=syn["dob_a"], chart_a=syn["chart_a"],
+                            name_b=syn["name_b"], dob_b=syn["dob_b"], chart_b=syn["chart_b"],
+                            synastry=syn["synastry"], synastry_report=syn["report"],
+                            chat_history=st.session_state.synastry_chat_history,
+                            question=syn_question,
+                        )
+                    )
+
+                st.session_state.synastry_chat_history.append({"role": "user", "content": syn_question})
+                st.session_state.synastry_chat_history.append({"role": "assistant", "content": syn_answer})
