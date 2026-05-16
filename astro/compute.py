@@ -1585,6 +1585,121 @@ def compute_transits(
     return transits
 
 
+def compute_arabic_parts(chart: dict) -> dict:
+    """
+    Compute classical Arabic Parts (Lots) beyond Fortune.
+    - Part of Spirit (Daimon): intentional self, life purpose
+    - Part of Eros: desire, attraction, what we find beautiful
+    - Part of Marriage: relationship timing and type
+    All use the same sectarian logic as Part of Fortune.
+    """
+    asc = chart.get("ascendant")
+    sun = chart.get("sun")
+    moon = chart.get("moon")
+    venus = chart.get("venus")
+
+    if not asc or not sun or not moon:
+        return {}
+    asc_abs = asc.get("abs_pos")
+    sun_abs = sun.get("abs_pos")
+    moon_abs = moon.get("abs_pos")
+    if asc_abs is None or sun_abs is None or moon_abs is None:
+        return {}
+
+    raw_house = sun.get("house")
+    sun_house_num = raw_house if isinstance(raw_house, int) else _HOUSE_NUMBER.get(str(raw_house), 0)
+    is_day = sun_house_num >= 7
+
+    result: dict = {}
+
+    # Part of Spirit (Daimon) — inverse sect formula of Fortune; represents intentional soul direction
+    spirit_abs = (asc_abs + sun_abs - moon_abs) % 360 if is_day else (asc_abs + moon_abs - sun_abs) % 360
+    s_sign, s_pos = _sign_from_abs_pos(spirit_abs)
+    spirit: dict = {"abs_pos": round(spirit_abs, 2), "sign": s_sign, "position": round(s_pos, 2), "chart_type": "day" if is_day else "night"}
+    d = _get_dignity("sun", s_sign)
+    if d:
+        spirit["dignity"] = d
+    result["spirit"] = spirit
+
+    if venus and venus.get("abs_pos") is not None:
+        venus_abs = venus["abs_pos"]
+
+        # Part of Eros — desire, attraction, aesthetic longing; ASC + Venus - Sun
+        eros_abs = (asc_abs + venus_abs - sun_abs) % 360
+        e_sign, e_pos = _sign_from_abs_pos(eros_abs)
+        eros: dict = {"abs_pos": round(eros_abs, 2), "sign": e_sign, "position": round(e_pos, 2)}
+        d = _get_dignity("venus", e_sign)
+        if d:
+            eros["dignity"] = d
+        result["eros"] = eros
+
+        # Part of Marriage — relationship; ASC + Descendant - Venus (Descendant = ASC + 180)
+        desc_abs = (asc_abs + 180) % 360
+        marriage_abs = (asc_abs + desc_abs - venus_abs) % 360
+        m_sign, m_pos = _sign_from_abs_pos(marriage_abs)
+        marriage: dict = {"abs_pos": round(marriage_abs, 2), "sign": m_sign, "position": round(m_pos, 2)}
+        d = _get_dignity("venus", m_sign)
+        if d:
+            marriage["dignity"] = d
+        result["marriage"] = marriage
+
+    return result
+
+
+def compute_antiscia(chart: dict, orb: float = 1.5) -> list[dict]:
+    """
+    Detect antiscia (mirror across Cancer-Capricorn solstice axis) and
+    contra-antiscia (mirror across Aries-Libra equinox axis) between natal bodies.
+
+    Antiscia: pos1 + pos2 ≈ 180° — planets "equidistant from the solstice"
+    Contra-antiscia: pos1 + pos2 ≈ 0°/360° — equidistant from the equinox
+    """
+    bodies: dict[str, float] = {}
+    for planet in _PLANETS:
+        d = chart.get(planet)
+        if d and d.get("abs_pos") is not None:
+            bodies[planet] = d["abs_pos"]
+    for key in ("ascendant", "midheaven"):
+        d = chart.get(key)
+        if d and d.get("abs_pos") is not None:
+            bodies[key] = d["abs_pos"]
+    chiron = chart.get("chiron")
+    if chiron and chiron.get("abs_pos") is not None:
+        bodies["chiron"] = chiron["abs_pos"]
+    nn = chart.get("north_node")
+    if nn and nn.get("abs_pos") is not None:
+        bodies["north_node"] = nn["abs_pos"]
+
+    connections: list[dict] = []
+    body_list = list(bodies.items())
+
+    for i, (p1, pos1) in enumerate(body_list):
+        for p2, pos2 in body_list[i + 1:]:
+            total = (pos1 + pos2) % 360
+
+            # Antiscia: sum ≈ 180°
+            anti_diff = abs(total - 180)
+            anti_diff = min(anti_diff, 360 - anti_diff)
+            if anti_diff <= orb:
+                connections.append({
+                    "planet1": p1, "planet2": p2,
+                    "type": "antiscia", "orb": round(anti_diff, 2),
+                    "axis": "Cancer-Capricorn (solstice)",
+                })
+
+            # Contra-antiscia: sum ≈ 0°/360°
+            contra_diff = min(total, 360 - total)
+            if contra_diff <= orb:
+                connections.append({
+                    "planet1": p1, "planet2": p2,
+                    "type": "contra-antiscia", "orb": round(contra_diff, 2),
+                    "axis": "Aries-Libra (equinox)",
+                })
+
+    connections.sort(key=lambda x: x["orb"])
+    return connections
+
+
 def compute_chart(
     full_name: str,
     birth_year: int, birth_month: int, birth_day: int,
@@ -1664,5 +1779,9 @@ def compute_chart(
     chart["anaretic_degrees"] = compute_anaretic_degrees(chart)
     chart["sect"] = compute_sect(chart)
     chart["fixed_stars"] = compute_fixed_star_conjunctions(chart)
+
+    # Additional classical lots and antiscia
+    chart["arabic_parts"] = compute_arabic_parts(chart)
+    chart["antiscia"] = compute_antiscia(chart)
 
     return chart

@@ -185,6 +185,37 @@ def _format_part_of_fortune(pof: dict | None) -> str:
     return f"- {pof['sign']} {pof['position']}°{dignity} ({chart_type} chart formula)"
 
 
+def _format_arabic_parts(parts: dict) -> str:
+    if not parts:
+        return "Arabic Parts unavailable."
+    lines = []
+    meta = {
+        "spirit":   ("Part of Spirit (Daimon)", "intentional soul direction, conscious life purpose, what the self wills toward"),
+        "eros":     ("Part of Eros",            "desire, attraction, aesthetic longing, what the soul finds beautiful and pursues"),
+        "marriage": ("Part of Marriage",         "relationship style, timing, and the qualities sought in partnership"),
+    }
+    for key, (label, meaning) in meta.items():
+        p = parts.get(key)
+        if not p:
+            continue
+        dignity = f" [{p['dignity']}]" if p.get("dignity") else ""
+        ct = f" ({p['chart_type']} chart formula)" if p.get("chart_type") else ""
+        lines.append(f"- {label}: {p['sign']} {p['position']}°{dignity}{ct} — {meaning}")
+    return "\n".join(lines) if lines else "Arabic Parts unavailable."
+
+
+def _format_antiscia(connections: list[dict]) -> str:
+    if not connections:
+        return "No antiscia or contra-antiscia connections within 1.5° orb."
+    lines = []
+    for c in connections:
+        p1 = c["planet1"].replace("_", " ").title()
+        p2 = c["planet2"].replace("_", " ").title()
+        label = "Antiscion" if c["type"] == "antiscia" else "Contra-antiscion"
+        lines.append(f"- {p1} {label} {p2} (orb {c['orb']}°, {c['axis']})")
+    return "\n".join(lines)
+
+
 def _format_stelliums(stelliums: list[dict]) -> str:
     if not stelliums:
         return "No stelliums (3+ planets in same sign or house)."
@@ -482,6 +513,8 @@ def build_prompt(state: "AstrologerState") -> str:
         sect_section = "## Planetary Sect\n" + _format_sect(chart.get("sect") or {})
         lunar_phase_section = "## Natal Lunar Phase\n" + _format_lunar_phase(chart.get("lunar_phase") or {})
         pof_section = "## Part of Fortune\n" + _format_part_of_fortune(chart.get("part_of_fortune"))
+        arabic_section = "## Additional Arabic Parts\n" + _format_arabic_parts(chart.get("arabic_parts") or {})
+        antiscia_section = "## Antiscia & Contra-Antiscia (1.5° orb)\n" + _format_antiscia(chart.get("antiscia") or [])
         stelliums_section = "## Stelliums\n" + _format_stelliums(chart.get("stelliums") or [])
         receptions_section = "## Mutual Receptions\n" + _format_mutual_receptions(chart.get("mutual_receptions") or [])
         nodes_section = "## Lunar Nodes\n" + _format_nodes(chart)
@@ -500,7 +533,8 @@ def build_prompt(state: "AstrologerState") -> str:
         vedic_section = "## Vedic (Jyotish) Overlay\n" + _format_vedic(chart.get("vedic"))
         chart_section = "\n\n".join([
             placements, anaretic_section, fixed_stars_section, ruler_section, balance_section, sect_section,
-            lunar_phase_section, pof_section, stelliums_section, receptions_section,
+            lunar_phase_section, pof_section, arabic_section, antiscia_section,
+            stelliums_section, receptions_section,
             nodes_section, houses_section,
             aspects_section, patterns_section, transits_section, upcoming_section,
             progressions_section, prog_aspects_section,
@@ -536,6 +570,10 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Stelliums: overwhelmingly concentrated energy — lead with the stellium before individual planets in that area
 - Lunar phase: the person's fundamental life rhythm and approach to beginnings/endings
 - Part of Fortune: the sign/area of natural ease and abundance
+- Part of Spirit: the intentional counterpart to Fortune — where Fortune shows what flows naturally, Spirit shows what the soul deliberately wills; important when discussing life purpose or spiritual direction
+- Part of Eros: the sign of longing and aesthetic desire; what the person finds irresistibly beautiful or pursues with passion; relevant in questions of creativity, romance, and calling
+- Part of Marriage: the sign/area describing relationship style and what is sought in partnership; integrate with the 7th house and Venus for a complete relationship picture
+- Antiscia: two planets in antiscion (summing to 180°) operate as a hidden conjunction — they support and reflect each other across the solstice axis, often appearing as an inexplicable sympathy or talent that standard aspects don't explain. Contra-antiscia (summing to 360°) behave like a hidden opposition — tension and awareness between the two planets. Antiscia connections involving the Sun, Moon, or chart ruler are most significant; name them in the Life Direction section if they involve the Nodes, or in the Overview if they link a luminary to a malefic or benefic.
 - Chiron: long-term wound and healing gift; where it falls shows where serving others becomes possible
 - Progressed Sun/Moon: the current psychological chapter and emotional climate
 - Progressed sign change within ±2 years: a threshold event — name the approximate year
@@ -612,6 +650,8 @@ def _build_followup_messages(
             f"\n\nChart Ruler:\n{_format_chart_ruler(chart.get('chart_ruler'))}"
             f"\n\nLunar Phase:\n{_format_lunar_phase(chart.get('lunar_phase') or {})}"
             f"\n\nPart of Fortune:\n{_format_part_of_fortune(chart.get('part_of_fortune'))}"
+            f"\n\nArabic Parts:\n{_format_arabic_parts(chart.get('arabic_parts') or {})}"
+            f"\n\nAntiscia:\n{_format_antiscia(chart.get('antiscia') or [])}"
             f"\n\nStelliums:\n{_format_stelliums(chart.get('stelliums') or [])}"
             f"\n\nMutual Receptions:\n{_format_mutual_receptions(chart.get('mutual_receptions') or [])}"
             f"\n\nLunar Nodes:\n{_format_nodes(chart)}"
