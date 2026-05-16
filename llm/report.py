@@ -120,6 +120,35 @@ def _format_houses(houses: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_aspect_patterns(patterns: list[dict]) -> str:
+    if not patterns:
+        return "No major aspect patterns detected."
+    lines = []
+    for p in patterns:
+        planets_str = ", ".join(pl.replace("_", " ").title() for pl in p["planets"])
+        apex = f" — apex: {p['apex'].replace('_', ' ').title()}" if p.get("apex") else ""
+        element = f" ({p['element']})" if p.get("element") else ""
+        lines.append(f"- **{p['type']}**{element}: {planets_str}{apex}")
+    return "\n".join(lines)
+
+
+def _format_profection(profection: dict | None) -> str:
+    if not profection:
+        return "Annual profection unavailable."
+    house = profection["profected_house"]
+    theme = _HOUSE_THEMES.get(house, "")
+    lord = (profection.get("lord_of_year") or "unknown").capitalize()
+    lord_sign = profection.get("lord_sign", "unknown")
+    lord_pos = profection.get("lord_position", "?")
+    lord_house = f", House {profection['lord_house']}" if profection.get("lord_house") else ""
+    retro = " (retrograde)" if profection.get("lord_retrograde") else ""
+    dignity = f" [{profection['lord_dignity']}]" if profection.get("lord_dignity") else ""
+    return (
+        f"- Age {profection['age']} → House {house} profection year ({theme})\n"
+        f"- Lord of the Year: {lord} in {lord_sign} {lord_pos}°{retro}{lord_house}{dignity}"
+    )
+
+
 def _format_progressed_aspects(prog_aspects: list[dict]) -> str:
     if not prog_aspects:
         return "No progressed aspects within 1° orb of natal chart points."
@@ -183,10 +212,12 @@ def build_prompt(state: "AstrologerState") -> str:
         nodes_section = "## Lunar Nodes\n" + _format_nodes(chart)
         houses_section = "## House Cusps\n" + _format_houses(chart.get("houses") or {})
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
+        patterns_section = "## Aspect Patterns\n" + _format_aspect_patterns(chart.get("aspect_patterns") or [])
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
         progressions_section = "## Secondary Progressions\n" + _format_progressions(chart.get("progressions"))
         prog_aspects_section = "## Progressed Aspects to Natal Chart\n" + _format_progressed_aspects(chart.get("progressed_aspects") or [])
-        chart_section = "\n\n".join([placements, ruler_section, balance_section, nodes_section, houses_section, aspects_section, transits_section, progressions_section, prog_aspects_section])
+        profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
+        chart_section = "\n\n".join([placements, ruler_section, balance_section, nodes_section, houses_section, aspects_section, patterns_section, transits_section, progressions_section, prog_aspects_section, profection_section])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
 
@@ -202,6 +233,8 @@ Use the elemental and modal balance to characterise overall temperament before i
 Progressed Sun and Moon show the current life phase; a progressed sign change is a major threshold event worth highlighting.
 Chiron represents core wounds and healing gifts; interpret its sign, house, and aspects as long-term soul work.
 Progressed aspects to natal planets (1° orb) mark pivotal turning points — applying ones are currently activating.
+Aspect patterns (Grand Trine, T-Square, Grand Cross, Yod) are the dominant structural themes of the chart — address them prominently.
+The Annual Profection lord of the year is the single most important planet for the current 12-month period; weave it through timing and guidance.
 
 ## Person Details
 - **Full Name:** {state['full_name']}
@@ -251,13 +284,17 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         transits_text = _format_transits(chart.get("transits") or [])
         prog_text = _format_progressions(chart.get("progressions"))
         prog_aspects_text = _format_progressed_aspects(chart.get("progressed_aspects") or [])
+        patterns_text = _format_aspect_patterns(chart.get("aspect_patterns") or [])
+        profection_text = _format_profection(chart.get("profection"))
         chart_summary = (
             f"{placements}\n\nChart Ruler:\n{ruler_text}"
             f"\n\nLunar Nodes:\n{nodes_text}"
             f"\n\nNatal Aspects:\n{aspects_text}"
+            f"\n\nAspect Patterns:\n{patterns_text}"
             f"\n\nCurrent Transits:\n{transits_text}"
             f"\n\nSecondary Progressions:\n{prog_text}"
             f"\n\nProgressed Aspects to Natal:\n{prog_aspects_text}"
+            f"\n\nAnnual Profection:\n{profection_text}"
         )
     else:
         chart_summary = "Natal chart data unavailable."

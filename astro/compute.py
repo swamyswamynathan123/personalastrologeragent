@@ -319,6 +319,137 @@ def compute_progressed_aspects(natal_chart: dict, progressions: dict) -> list[di
     return aspects
 
 
+def compute_aspect_patterns(chart: dict, aspects: list[dict]) -> list[dict]:
+    """Detect Grand Trine, T-Square, Grand Cross, and Yod configurations."""
+    aspect_between: dict[frozenset, str] = {}
+    for a in aspects:
+        aspect_between[frozenset({a["planet1"], a["planet2"]})] = a["aspect"]
+
+    def has_aspect(p1: str, p2: str, name: str) -> bool:
+        return aspect_between.get(frozenset({p1, p2})) == name
+
+    # Collect all body positions (same set as compute_aspects)
+    all_pos: dict[str, float] = {}
+    for planet in _PLANETS:
+        d = chart.get(planet)
+        if d and d.get("abs_pos") is not None:
+            all_pos[planet] = d["abs_pos"]
+    chiron = chart.get("chiron")
+    if chiron and chiron.get("abs_pos") is not None:
+        all_pos["chiron"] = chiron["abs_pos"]
+    for key in ("ascendant", "midheaven"):
+        d = chart.get(key)
+        if d and d.get("abs_pos") is not None:
+            all_pos[key] = d["abs_pos"]
+    nn = chart.get("north_node")
+    if nn and nn.get("abs_pos") is not None:
+        all_pos["north_node"] = nn["abs_pos"]
+
+    def has_quincunx(p1: str, p2: str) -> bool:
+        if p1 not in all_pos or p2 not in all_pos:
+            return False
+        return abs(_angular_diff(all_pos[p1], all_pos[p2]) - 150) <= 3.0
+
+    planets = list(all_pos.keys())
+    n = len(planets)
+    patterns: list[dict] = []
+    seen_gt: set = set()
+    seen_ts: set = set()
+    seen_gc: set = set()
+    seen_yod: set = set()
+
+    # Grand Trine
+    for i in range(n):
+        for j in range(i + 1, n):
+            for k in range(j + 1, n):
+                A, B, C = planets[i], planets[j], planets[k]
+                if has_aspect(A, B, "Trine") and has_aspect(B, C, "Trine") and has_aspect(A, C, "Trine"):
+                    key = frozenset({A, B, C})
+                    if key not in seen_gt:
+                        seen_gt.add(key)
+                        signs = [chart.get(p, {}).get("sign") for p in (A, B, C)]
+                        elements = [_SIGN_ELEMENT.get(s) for s in signs if s]
+                        element = elements[0] if elements and len(set(elements)) == 1 else None
+                        patterns.append({"type": "Grand Trine", "planets": [A, B, C], "element": element, "apex": None})
+
+    # T-Square
+    for i in range(n):
+        for j in range(i + 1, n):
+            A, B = planets[i], planets[j]
+            if not has_aspect(A, B, "Opposition"):
+                continue
+            for C in planets:
+                if C in (A, B) or not (has_aspect(A, C, "Square") and has_aspect(B, C, "Square")):
+                    continue
+                key = frozenset({A, B, C})
+                if key not in seen_ts:
+                    seen_ts.add(key)
+                    patterns.append({"type": "T-Square", "planets": [A, B, C], "element": None, "apex": C})
+
+    # Grand Cross
+    for i in range(n):
+        for j in range(i + 1, n):
+            for k in range(j + 1, n):
+                for l in range(k + 1, n):
+                    A, B, C, D = planets[i], planets[j], planets[k], planets[l]
+                    all_six = [(A, B), (A, C), (A, D), (B, C), (B, D), (C, D)]
+                    asp_counts = {"Opposition": 0, "Square": 0}
+                    for p1, p2 in all_six:
+                        v = aspect_between.get(frozenset({p1, p2}))
+                        if v in asp_counts:
+                            asp_counts[v] += 1
+                    if asp_counts["Opposition"] == 2 and asp_counts["Square"] == 4:
+                        key = frozenset({A, B, C, D})
+                        if key not in seen_gc:
+                            seen_gc.add(key)
+                            patterns.append({"type": "Grand Cross", "planets": [A, B, C, D], "element": None, "apex": None})
+
+    # Yod (Finger of God)
+    for i in range(n):
+        for j in range(i + 1, n):
+            A, B = planets[i], planets[j]
+            if not has_aspect(A, B, "Sextile"):
+                continue
+            for C in planets:
+                if C in (A, B) or not (has_quincunx(A, C) and has_quincunx(B, C)):
+                    continue
+                key = frozenset({A, B, C})
+                if key not in seen_yod:
+                    seen_yod.add(key)
+                    patterns.append({"type": "Yod", "planets": [A, B, C], "element": None, "apex": C})
+
+    return patterns
+
+
+def compute_profection(
+    birth_year: int, birth_month: int, birth_day: int,
+    current_year: int, current_month: int, current_day: int,
+    chart: dict,
+) -> dict:
+    """Annual profection: each year of life activates the next house in sequence."""
+    age = current_year - birth_year
+    if (current_month, current_day) < (birth_month, birth_day):
+        age -= 1
+    profected_house = (age % 12) + 1
+
+    house_data = (chart.get("houses") or {}).get(str(profected_house)) or {}
+    house_sign = house_data.get("sign")
+    lord = _SIGN_RULER.get(house_sign) if house_sign else None
+    lord_data = chart.get(lord) if lord else None
+
+    return {
+        "age": age,
+        "profected_house": profected_house,
+        "house_sign": house_sign,
+        "lord_of_year": lord,
+        "lord_sign": lord_data.get("sign") if lord_data else None,
+        "lord_position": lord_data.get("position") if lord_data else None,
+        "lord_house": lord_data.get("house") if lord_data else None,
+        "lord_retrograde": lord_data.get("retrograde", False) if lord_data else False,
+        "lord_dignity": lord_data.get("dignity") if lord_data else None,
+    }
+
+
 def compute_aspects(chart: dict) -> list[dict]:
     bodies: dict[str, tuple[float, bool]] = {}
     for planet in _PLANETS:
