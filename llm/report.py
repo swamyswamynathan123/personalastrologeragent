@@ -913,28 +913,44 @@ def answer_synastry_followup_stream(
                 yield content
 
 
+_REPORT_SYSTEM = (
+    "You are a master astrologer fluent in both Western and Vedic (Jyotish) traditions. "
+    "You synthesize natal, transit, progression, solar arc, Hellenistic, and Vedic techniques "
+    "into coherent, personally grounded readings. You think in themes first — identify dominant "
+    "patterns across all layers, then show how each technique confirms them. When the Firdaria "
+    "major lord and Vimshottari Mahadasha lord are the same planet, you name this cross-tradition "
+    "convergence explicitly. You never make vague generalizations. Every statement is anchored to "
+    "specific planets, degrees, and houses. You speak directly and warmly to the person, as if "
+    "sitting across from them."
+)
+
+
 def generate_report(state: "AstrologerState") -> str:
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-
     response = client.chat.completions.create(
         model="gpt-4o",
         max_tokens=4096,
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a master astrologer fluent in both Western and Vedic (Jyotish) traditions. "
-                    "You synthesize natal, transit, progression, solar arc, Hellenistic, and Vedic techniques "
-                    "into coherent, personally grounded readings. You think in themes first — identify dominant "
-                    "patterns across all layers, then show how each technique confirms them. When the Firdaria "
-                    "major lord and Vimshottari Mahadasha lord are the same planet, you name this cross-tradition "
-                    "convergence explicitly. You never make vague generalizations. Every statement is anchored to "
-                    "specific planets, degrees, and houses. You speak directly and warmly to the person, as if "
-                    "sitting across from them."
-                ),
-            },
+            {"role": "system", "content": _REPORT_SYSTEM},
             {"role": "user", "content": build_prompt(state)},
         ],
     )
-
     return response.choices[0].message.content
+
+
+def generate_report_stream(state: "AstrologerState"):
+    """Streaming variant — yields text chunks for st.write_stream()."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    with client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=4096,
+        stream=True,
+        messages=[
+            {"role": "system", "content": _REPORT_SYSTEM},
+            {"role": "user", "content": build_prompt(state)},
+        ],
+    ) as stream:
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield content
