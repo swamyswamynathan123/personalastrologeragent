@@ -120,6 +120,41 @@ def _format_houses(houses: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_lunar_phase(lunar_phase: dict) -> str:
+    if not lunar_phase:
+        return "Lunar phase unavailable."
+    return f"- {lunar_phase['phase']} ({lunar_phase['angle']}° Moon ahead of Sun) — {lunar_phase['description']}"
+
+
+def _format_part_of_fortune(pof: dict | None) -> str:
+    if not pof:
+        return "Part of Fortune unavailable."
+    dignity = f" [{pof['dignity']}]" if pof.get("dignity") else ""
+    chart_type = pof.get("chart_type", "").capitalize()
+    return f"- {pof['sign']} {pof['position']}°{dignity} ({chart_type} chart formula)"
+
+
+def _format_stelliums(stelliums: list[dict]) -> str:
+    if not stelliums:
+        return "No stelliums (3+ planets in same sign or house)."
+    lines = []
+    for s in stelliums:
+        planets = ", ".join(p.replace("_", " ").title() for p in s["planets"])
+        lines.append(f"- Stellium in {s['location']}: {planets} ({len(s['planets'])} planets)")
+    return "\n".join(lines)
+
+
+def _format_mutual_receptions(receptions: list[dict]) -> str:
+    if not receptions:
+        return "No mutual receptions detected."
+    lines = []
+    for r in receptions:
+        p1 = r["planet1"].capitalize()
+        p2 = r["planet2"].capitalize()
+        lines.append(f"- {p1} (in {r['planet1_sign']}) ↔ {p2} (in {r['planet2_sign']}) — mutual exchange of rulership")
+    return "\n".join(lines)
+
+
 def _format_solar_arcs(solar_arcs: dict) -> str:
     if not solar_arcs:
         return "Solar arc directions unavailable."
@@ -240,6 +275,10 @@ def build_prompt(state: "AstrologerState") -> str:
         ])
         ruler_section = "## Chart Ruler\n" + _format_chart_ruler(chart.get("chart_ruler"))
         balance_section = "## Elemental & Modal Balance\n" + _format_balance(chart.get("balance") or {})
+        lunar_phase_section = "## Natal Lunar Phase\n" + _format_lunar_phase(chart.get("lunar_phase") or {})
+        pof_section = "## Part of Fortune\n" + _format_part_of_fortune(chart.get("part_of_fortune"))
+        stelliums_section = "## Stelliums\n" + _format_stelliums(chart.get("stelliums") or [])
+        receptions_section = "## Mutual Receptions\n" + _format_mutual_receptions(chart.get("mutual_receptions") or [])
         nodes_section = "## Lunar Nodes\n" + _format_nodes(chart)
         houses_section = "## House Cusps\n" + _format_houses(chart.get("houses") or {})
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
@@ -251,7 +290,9 @@ def build_prompt(state: "AstrologerState") -> str:
         solar_arc_aspects_section = "## Solar Arc Aspects to Natal Chart\n" + _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
         profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
         chart_section = "\n\n".join([
-            placements, ruler_section, balance_section, nodes_section, houses_section,
+            placements, ruler_section, balance_section,
+            lunar_phase_section, pof_section, stelliums_section, receptions_section,
+            nodes_section, houses_section,
             aspects_section, patterns_section, transits_section,
             progressions_section, prog_aspects_section,
             solar_arcs_section, solar_arc_aspects_section,
@@ -275,6 +316,10 @@ Progressed aspects to natal planets (1° orb) mark pivotal turning points — ap
 Aspect patterns (Grand Trine, T-Square, Grand Cross, Yod) are the dominant structural themes of the chart — address them prominently.
 The Annual Profection lord of the year is the single most important planet for the current 12-month period; weave it through timing and guidance.
 Solar arc aspects within 1° orb are major life events activating now; applying solar arc aspects are imminent (within ~1 year), separating ones just passed. Treat them as concrete external turning points distinct from the more interior story told by progressions.
+The natal lunar phase describes the person's fundamental life rhythm and approach to cycles — weave it through the Personal Overview.
+The Part of Fortune shows the sign and area where ease, abundance, and wellbeing flow most naturally.
+Stelliums show where the chart's energy is overwhelmingly concentrated; address the stellium sign/house prominently in Key Life Themes.
+Mutual receptions strengthen both planets involved; treat them as cooperative allies rather than isolated placements.
 
 ## Person Details
 - **Full Name:** {state['full_name']}
@@ -328,8 +373,16 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         profection_text = _format_profection(chart.get("profection"))
         solar_arcs_text = _format_solar_arcs(chart.get("solar_arcs") or {})
         solar_arc_aspects_text = _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
+        lunar_phase_text = _format_lunar_phase(chart.get("lunar_phase") or {})
+        pof_text = _format_part_of_fortune(chart.get("part_of_fortune"))
+        stelliums_text = _format_stelliums(chart.get("stelliums") or [])
+        receptions_text = _format_mutual_receptions(chart.get("mutual_receptions") or [])
         chart_summary = (
             f"{placements}\n\nChart Ruler:\n{ruler_text}"
+            f"\n\nLunar Phase:\n{lunar_phase_text}"
+            f"\n\nPart of Fortune:\n{pof_text}"
+            f"\n\nStelliums:\n{stelliums_text}"
+            f"\n\nMutual Receptions:\n{receptions_text}"
             f"\n\nLunar Nodes:\n{nodes_text}"
             f"\n\nNatal Aspects:\n{aspects_text}"
             f"\n\nAspect Patterns:\n{patterns_text}"

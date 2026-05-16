@@ -70,6 +70,24 @@ _SIGN_MODALITY: dict[str, str] = {
     "Gemini": "Mutable", "Virgo": "Mutable", "Sagittarius": "Mutable", "Pisces": "Mutable",
 }
 
+# Maps kerykeion house-name strings to integers (handles both string and int house values)
+_HOUSE_NUMBER: dict[str, int] = {
+    "First_House": 1, "Second_House": 2, "Third_House": 3, "Fourth_House": 4,
+    "Fifth_House": 5, "Sixth_House": 6, "Seventh_House": 7, "Eighth_House": 8,
+    "Ninth_House": 9, "Tenth_House": 10, "Eleventh_House": 11, "Twelfth_House": 12,
+}
+
+_LUNAR_PHASES = [
+    (0,   45,  "New Moon",      "instinctive, subjective, seed-planting; life driven by pure potential and new beginnings"),
+    (45,  90,  "Crescent",      "emerging from the past, striving to establish something new against resistance"),
+    (90,  135, "First Quarter", "crisis of action; turning points demand decisive choices and bold moves"),
+    (135, 180, "Gibbous",       "refinement and analysis; devoted to improvement, preparation, and perfecting one's craft"),
+    (180, 225, "Full Moon",     "illumination and relationship; objectivity, heightened awareness, fulfillment through contrast"),
+    (225, 270, "Disseminating", "sharing and teaching; purpose expressed through distributing knowledge and lived experience"),
+    (270, 315, "Last Quarter",  "crisis of consciousness; reorientation, questioning old structures, conscious release"),
+    (315, 360, "Balsamic",      "completion and transition; prophetic, future-oriented energy clearing the way for a new cycle"),
+]
+
 
 def _safe_planet(subject: AstrologicalSubject, attr: str) -> Optional[dict]:
     planet = getattr(subject, attr, None)
@@ -317,6 +335,109 @@ def compute_progressed_aspects(natal_chart: dict, progressions: dict) -> list[di
                     "applying": applying,
                 })
     return aspects
+
+
+def compute_lunar_phase(chart: dict) -> dict:
+    """Return the natal lunar phase from the Sun-Moon angular separation."""
+    sun = chart.get("sun")
+    moon = chart.get("moon")
+    if not sun or not moon or sun.get("abs_pos") is None or moon.get("abs_pos") is None:
+        return {}
+    angle = (moon["abs_pos"] - sun["abs_pos"]) % 360
+    for start, end, name, desc in _LUNAR_PHASES:
+        if start <= angle < end:
+            return {"angle": round(angle, 2), "phase": name, "description": desc}
+    return {"angle": round(angle, 2), "phase": "New Moon", "description": _LUNAR_PHASES[0][3]}
+
+
+def compute_part_of_fortune(chart: dict) -> Optional[dict]:
+    """Lot of Fortune: ASC + Moon - Sun (day chart) or ASC + Sun - Moon (night chart)."""
+    asc = chart.get("ascendant")
+    sun = chart.get("sun")
+    moon = chart.get("moon")
+    if not asc or not sun or not moon:
+        return None
+    if asc.get("abs_pos") is None or sun.get("abs_pos") is None or moon.get("abs_pos") is None:
+        return None
+
+    raw_house = sun.get("house")
+    if isinstance(raw_house, int):
+        sun_house_num = raw_house
+    else:
+        sun_house_num = _HOUSE_NUMBER.get(str(raw_house), 0)
+    is_day = sun_house_num >= 7
+
+    if is_day:
+        pof_abs = (asc["abs_pos"] + moon["abs_pos"] - sun["abs_pos"]) % 360
+    else:
+        pof_abs = (asc["abs_pos"] + sun["abs_pos"] - moon["abs_pos"]) % 360
+
+    sign, pos = _sign_from_abs_pos(pof_abs)
+    result: dict = {
+        "abs_pos": round(pof_abs, 2),
+        "sign": sign,
+        "position": pos,
+        "chart_type": "day" if is_day else "night",
+    }
+    dignity = _get_dignity("moon", sign)
+    if dignity:
+        result["dignity"] = dignity
+    return result
+
+
+def compute_stelliums(chart: dict) -> list[dict]:
+    """Detect 3+ planets in the same sign or house."""
+    from collections import defaultdict
+    sign_planets: dict = defaultdict(list)
+    house_planets: dict = defaultdict(list)
+
+    for planet in _PLANETS:
+        data = chart.get(planet)
+        if not data:
+            continue
+        if data.get("sign"):
+            sign_planets[data["sign"]].append(planet)
+        raw_house = data.get("house")
+        if raw_house is not None:
+            if isinstance(raw_house, int):
+                house_num = raw_house
+            else:
+                house_num = _HOUSE_NUMBER.get(str(raw_house), 0)
+            if house_num:
+                house_planets[house_num].append(planet)
+
+    stelliums = []
+    for sign, planets in sign_planets.items():
+        if len(planets) >= 3:
+            stelliums.append({"type": "sign", "location": sign, "planets": planets})
+    for house_num, planets in house_planets.items():
+        if len(planets) >= 3:
+            stelliums.append({"type": "house", "location": f"House {house_num}", "planets": planets})
+    return stelliums
+
+
+def compute_mutual_receptions(chart: dict) -> list[dict]:
+    """Detect pairs of planets in each other's ruling signs."""
+    ruler_planets = list(set(_SIGN_RULER.values()))
+    receptions = []
+    checked: set = set()
+
+    for i, p1 in enumerate(ruler_planets):
+        for p2 in ruler_planets[i + 1:]:
+            key = frozenset({p1, p2})
+            if key in checked:
+                continue
+            checked.add(key)
+            d1 = chart.get(p1)
+            d2 = chart.get(p2)
+            if not d1 or not d2:
+                continue
+            if _SIGN_RULER.get(d1.get("sign")) == p2 and _SIGN_RULER.get(d2.get("sign")) == p1:
+                receptions.append({
+                    "planet1": p1, "planet1_sign": d1["sign"],
+                    "planet2": p2, "planet2_sign": d2["sign"],
+                })
+    return receptions
 
 
 def compute_solar_arcs(natal_chart: dict, progressions: dict) -> dict:
@@ -673,5 +794,11 @@ def compute_chart(
     for num_str, ruler in compute_house_rulers(chart).items():
         if chart["houses"].get(num_str) is not None:
             chart["houses"][num_str]["ruler"] = ruler
+
+    # Natal lunar phase, Part of Fortune, stelliums, mutual receptions
+    chart["lunar_phase"] = compute_lunar_phase(chart)
+    chart["part_of_fortune"] = compute_part_of_fortune(chart)
+    chart["stelliums"] = compute_stelliums(chart)
+    chart["mutual_receptions"] = compute_mutual_receptions(chart)
 
     return chart
