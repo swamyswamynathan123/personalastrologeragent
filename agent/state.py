@@ -8,6 +8,7 @@ class AstrologerState(TypedDict, total=False):
     birth_location: Optional[str]           # "City, Region, Country"
     birth_time: Optional[str]               # "HH:MM" (24-hour)
     birth_time_timezone: Optional[str]      # pytz timezone string, e.g. "Asia/Kolkata"
+    birth_time_confidence: Optional[str]    # "exact", "approximate", or "unknown"
     current_location: Optional[str]         # "City, Region, Country"
     additional_info: Optional[str]
     report_focus: Optional[str]

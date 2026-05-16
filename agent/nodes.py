@@ -27,6 +27,7 @@ def ingest_inputs(state: "AstrologerState") -> dict:
         "birth_location": state.get("birth_location"),
         "birth_time": state.get("birth_time"),
         "birth_time_timezone": state.get("birth_time_timezone"),
+        "birth_time_confidence": state.get("birth_time_confidence"),
         "current_location": state.get("current_location"),
         "additional_info": state.get("additional_info"),
         "report_focus": state.get("report_focus"),
@@ -114,6 +115,7 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_progressions, compute_progressed_aspects,
             compute_aspect_patterns, compute_profection,
             compute_solar_arcs, compute_solar_arc_aspects,
+            compute_solar_return,
         )
 
         birth_dt = datetime.fromisoformat(state["parsed_birth_datetime"])
@@ -191,6 +193,20 @@ def compute_astro(state: "AstrologerState") -> dict:
         except Exception:
             chart["solar_arcs"] = {}
             chart["solar_arc_aspects"] = []
+
+        try:
+            current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+            current_parts = [p.strip() for p in state["current_location"].split(",")]
+            chart["solar_return"] = compute_solar_return(
+                natal_chart=chart,
+                birth_month=birth_dt.month, birth_day=birth_dt.day,
+                current_year=current_dt.year, current_month=current_dt.month, current_day=current_dt.day,
+                natal_city=city, natal_nation=nation, tz_str=state.get("birth_time_timezone") or "UTC",
+                current_city=current_parts[0],
+                current_nation=current_parts[-1] if len(current_parts) > 1 else "",
+            )
+        except Exception:
+            chart["solar_return"] = {}
 
         try:
             current_dt = datetime.fromisoformat(state["parsed_current_datetime"])

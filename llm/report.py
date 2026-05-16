@@ -186,6 +186,44 @@ def _format_solar_arc_aspects(aspects: list[dict]) -> str:
     return "\n".join(lines)
 
 
+_SR_PLANETS = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto"]
+
+
+def _format_solar_return(sr: dict) -> str:
+    if not sr:
+        return "Solar return chart unavailable."
+    lines = [
+        f"(Solar return {sr.get('return_year', '')} — cast at current location, exact moment: {sr.get('return_date', 'unknown')})"
+    ]
+    asc = sr.get("ascendant")
+    mc = sr.get("midheaven")
+    moon = sr.get("moon")
+    if asc:
+        lines.append(f"- SR Ascendant: {asc['sign']} {asc['position']}° — overall theme and self-presentation for the year")
+    if mc:
+        lines.append(f"- SR Midheaven: {mc['sign']} {mc['position']}° — career and public-facing focus")
+    if moon:
+        house = f", SR House {moon['house']}" if moon.get("house") else ""
+        lines.append(f"- SR Moon: {moon['sign']} {moon['position']}°{house} — emotional tone of the year")
+    angular = sr.get("angular_planets") or []
+    if angular:
+        ang_str = "; ".join(
+            f"{a['planet'].capitalize()} conjunct SR {a['angle'].replace('_', ' ').title()} (orb {a['orb']}°)"
+            for a in angular
+        )
+        lines.append(f"- Angular planets (most prominent this year): {ang_str}")
+    # Houses with 2+ SR planets = highlighted life areas
+    house_map: dict[str, list[str]] = {}
+    for planet in _SR_PLANETS:
+        p = sr.get(planet)
+        if p and p.get("house"):
+            house_map.setdefault(str(p["house"]), []).append(planet)
+    for house, planets in house_map.items():
+        if len(planets) >= 2:
+            lines.append(f"- SR House {house} occupied by {', '.join(p.capitalize() for p in planets)} — highlighted area of life this year")
+    return "\n".join(lines)
+
+
 def _format_aspect_patterns(patterns: list[dict]) -> str:
     if not patterns:
         return "No major aspect patterns detected."
@@ -289,6 +327,7 @@ def build_prompt(state: "AstrologerState") -> str:
         solar_arcs_section = "## Solar Arc Directions\n" + _format_solar_arcs(chart.get("solar_arcs") or {})
         solar_arc_aspects_section = "## Solar Arc Aspects to Natal Chart\n" + _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
         profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
+        solar_return_section = "## Solar Return Chart\n" + _format_solar_return(chart.get("solar_return") or {})
         chart_section = "\n\n".join([
             placements, ruler_section, balance_section,
             lunar_phase_section, pof_section, stelliums_section, receptions_section,
@@ -296,7 +335,7 @@ def build_prompt(state: "AstrologerState") -> str:
             aspects_section, patterns_section, transits_section,
             progressions_section, prog_aspects_section,
             solar_arcs_section, solar_arc_aspects_section,
-            profection_section,
+            profection_section, solar_return_section,
         ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
@@ -311,7 +350,7 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - **Full Name:** {state['full_name']}
 - **Date of Birth:** {state['parsed_dob']}
 - **Birth Location:** {state['birth_location']}
-- **Birth Time:** {state['birth_time']} ({state.get('birth_time_timezone', 'timezone not specified')})
+- **Birth Time:** {state['birth_time']} ({state.get('birth_time_timezone', 'timezone not specified')}) [Confidence: {state.get('birth_time_confidence') or 'exact'}]
 - **Current Location:** {state['current_location']}
 - **Report Generated As Of:** {state['parsed_current_datetime']}
 - **Report Focus:** {focus}
@@ -333,6 +372,8 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Solar arc aspects within 1°: concrete external turning points (applying = within ~1 year); distinct from the more interior story of progressions
 - Profection lord of the year: the single most important planet for the current 12-month period
 - Priority hierarchy: outer-planet transits/arcs to natal ASC/MC/Sun/Moon > outer to personal planets > inner planet transits
+- Birth time confidence: when "approximate" or "unknown", treat Ascendant, house cusps, and house-based interpretations as possibilities rather than certainties; note the uncertainty explicitly and weight sign-based interpretations (unaffected by birth time) more heavily
+- Solar return chart: the SR Ascendant and any angular planets are the dominant themes for the 12-month period from the return date; integrate the SR with the profection for a complete annual picture
 
 ## Synthesis Protocol — Complete Mentally Before Writing
 1. Scan ALL predictive layers and identify the 2–3 themes that recur most across natal + transits + progressions + solar arcs + profection. These become the reading's spine.
@@ -394,6 +435,7 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         profection_text = _format_profection(chart.get("profection"))
         solar_arcs_text = _format_solar_arcs(chart.get("solar_arcs") or {})
         solar_arc_aspects_text = _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
+        solar_return_text = _format_solar_return(chart.get("solar_return") or {})
         lunar_phase_text = _format_lunar_phase(chart.get("lunar_phase") or {})
         pof_text = _format_part_of_fortune(chart.get("part_of_fortune"))
         stelliums_text = _format_stelliums(chart.get("stelliums") or [])
@@ -413,6 +455,7 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
             f"\n\nSolar Arc Directions:\n{solar_arcs_text}"
             f"\n\nSolar Arc Aspects to Natal:\n{solar_arc_aspects_text}"
             f"\n\nAnnual Profection:\n{profection_text}"
+            f"\n\nSolar Return Chart:\n{solar_return_text}"
         )
     else:
         chart_summary = "Natal chart data unavailable."

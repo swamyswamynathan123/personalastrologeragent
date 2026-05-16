@@ -523,6 +523,116 @@ def compute_solar_arc_aspects(natal_chart: dict, solar_arcs: dict) -> list[dict]
     return aspects
 
 
+def compute_solar_return(
+    natal_chart: dict,
+    birth_month: int, birth_day: int,
+    current_year: int, current_month: int, current_day: int,
+    natal_city: str, natal_nation: str, tz_str: str,
+    current_city: str, current_nation: str,
+) -> dict:
+    """Find the exact solar return moment via binary search, then cast the chart."""
+    from datetime import datetime, date, timedelta
+
+    natal_sun = natal_chart.get("sun")
+    if not natal_sun or natal_sun.get("abs_pos") is None:
+        return {}
+    natal_sun_abs = natal_sun["abs_pos"]
+
+    # Choose solar return year: most recently completed (or imminent within 1 day)
+    current_date = date(current_year, current_month, current_day)
+    try:
+        this_bday = date(current_year, birth_month, birth_day)
+    except ValueError:
+        this_bday = date(current_year, birth_month, min(birth_day, 28))
+
+    sr_center = this_bday if this_bday <= current_date + timedelta(days=1) else (
+        date(current_year - 1, birth_month, min(birth_day, 28))
+    )
+
+    lo = datetime(sr_center.year, sr_center.month, sr_center.day, 0, 0) - timedelta(days=2)
+    hi = lo + timedelta(days=4)
+
+    def sun_pos_at(dt: datetime) -> float:
+        try:
+            s = AstrologicalSubject(
+                "SR_search", dt.year, dt.month, dt.day, dt.hour, dt.minute,
+                city=natal_city, nation=natal_nation, tz_str=tz_str, online=True,
+            )
+            p = _safe_planet(s, "sun")
+            return p["abs_pos"] if p and p.get("abs_pos") is not None else -1.0
+        except Exception:
+            return -1.0
+
+    # Binary search — 10 iterations → ~0.005° precision (~18 min of time)
+    result_dt = lo + (hi - lo) / 2
+    for _ in range(10):
+        mid = lo + (hi - lo) / 2
+        pos = sun_pos_at(mid)
+        if pos < 0:
+            break
+        diff = (pos - natal_sun_abs) % 360
+        if diff > 180:
+            diff -= 360
+        if abs(diff) < 0.01:
+            result_dt = mid
+            break
+        if diff > 0:
+            hi = mid
+        else:
+            lo = mid
+    else:
+        result_dt = lo + (hi - lo) / 2
+
+    # Cast the SR chart at the current location
+    try:
+        sr_subj = AstrologicalSubject(
+            "Solar Return",
+            result_dt.year, result_dt.month, result_dt.day,
+            result_dt.hour, result_dt.minute,
+            city=current_city, nation=current_nation, tz_str="UTC", online=True,
+        )
+    except Exception:
+        return {}
+
+    sr: dict = {"return_date": result_dt.strftime("%Y-%m-%d %H:%M UTC"), "return_year": result_dt.year}
+
+    for planet in _PLANETS:
+        sr[planet] = _safe_planet(sr_subj, planet)
+
+    first = getattr(sr_subj, "first_house", None)
+    tenth = getattr(sr_subj, "tenth_house", None)
+    sr["ascendant"] = {
+        "sign": getattr(first, "sign", None),
+        "position": round(getattr(first, "position", 0.0), 2),
+        "abs_pos": round(getattr(first, "abs_pos", 0.0), 2),
+    } if first else None
+    sr["midheaven"] = {
+        "sign": getattr(tenth, "sign", None),
+        "position": round(getattr(tenth, "position", 0.0), 2),
+        "abs_pos": round(getattr(tenth, "abs_pos", 0.0), 2),
+    } if tenth else None
+
+    sr["houses"] = {}
+    for i, attr in enumerate(_HOUSE_ATTRS, 1):
+        sr["houses"][str(i)] = _safe_house(sr_subj, attr)
+
+    # Planets within 5° of SR ASC or MC (angular = most prominent for the year)
+    angular = []
+    for key in ("ascendant", "midheaven"):
+        angle = sr.get(key)
+        if not angle or angle.get("abs_pos") is None:
+            continue
+        for planet in _PLANETS:
+            p = sr.get(planet)
+            if p and p.get("abs_pos") is not None:
+                orb = _angular_diff(p["abs_pos"], angle["abs_pos"])
+                if orb <= 5.0:
+                    angular.append({"planet": planet, "angle": key, "orb": round(orb, 2)})
+    sr["angular_planets"] = angular
+
+    return sr
+
+
 def compute_aspect_patterns(chart: dict, aspects: list[dict]) -> list[dict]:
     """Detect Grand Trine, T-Square, Grand Cross, and Yod configurations."""
     aspect_between: dict[frozenset, str] = {}

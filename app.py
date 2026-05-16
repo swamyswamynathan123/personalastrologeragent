@@ -196,6 +196,12 @@ with st.sidebar:
             max_value=date.today(),
         )
         birth_time = st.time_input("Birth Time *", value=None, step=60)
+        birth_time_confidence = st.selectbox(
+            "Birth Time Confidence",
+            options=["exact", "approximate", "unknown"],
+            index=0,
+            help="How certain are you of the birth time? Approximate/unknown softens house-based interpretations.",
+        )
         birth_location = st.text_input(
             "Birth Location *",
             placeholder="City, Region, Country",
@@ -239,6 +245,7 @@ if submitted:
         "birth_location": birth_location.strip() if birth_location else None,
         "birth_time": birth_time.strftime("%H:%M") if birth_time else None,
         "birth_time_timezone": birth_time_timezone,
+        "birth_time_confidence": birth_time_confidence,
         "current_location": current_location.strip() if current_location else None,
         "additional_info": additional_info.strip() if additional_info else None,
         "report_focus": report_focus.strip() if report_focus else None,
