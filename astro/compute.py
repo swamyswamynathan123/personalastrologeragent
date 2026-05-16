@@ -83,6 +83,39 @@ _SECT_NOCTURNAL = {"moon", "venus", "mars"}       # night sect planets
 _SECT_MALEFICS = {"saturn", "mars"}
 _SECT_BENEFICS = {"jupiter", "venus"}
 
+# Fixed stars: (name, J2000 tropical longitude°, nature, interpretation)
+# Orb: 1.0° conjunction to any natal body or angle
+_FIXED_STARS: list[tuple[str, float, str, str]] = [
+    ("Algol",       56.17, "malefic",
+     "the most feared star; Medusa's eye — compulsive, dangerous power; themes of violence, obsession, or loss that must be consciously transformed"),
+    ("Alcyone",     60.00, "mixed",
+     "Pleiades — grief and weeping, but also far-sighted ambition and connection to collective memory and vision"),
+    ("Aldebaran",   69.78, "benefic",
+     "Royal Star (Watcher of the East) — honor, success, intelligence; greatness sustained only through integrity"),
+    ("Rigel",       76.83, "benefic",
+     "rise through persistent effort and technical mastery; practical ambition that earns its rewards"),
+    ("Betelgeuse",  88.75, "benefic",
+     "great success, bold achievement, expansive fortune; a star of rapid rise and commanding presence"),
+    ("Sirius",     104.08, "benefic",
+     "the brightest star — fierce ambition, fame, renown; burns intensely and can illuminate or consume"),
+    ("Pollux",     113.22, "mixed",
+     "bold warrior energy — audacious and courageous; victory is possible but ruthlessness must be guarded against"),
+    ("Regulus",    149.83, "benefic",
+     "Royal Star (Heart of the Lion) — leadership, fame, royalty; success is assured unless revenge is sought, which destroys all gains"),
+    ("Spica",      203.83, "benefic",
+     "one of the most fortunate stars — artistic gifts, brilliance, grace, and natural abundance"),
+    ("Arcturus",   204.23, "benefic",
+     "success through independent, pioneering effort; a trailblazer who forges their own path"),
+    ("Antares",    249.77, "mixed",
+     "Royal Star (Heart of the Scorpion) — fierce ambition, passion, warrior drive; success comes but reckless overreach destroys it"),
+    ("Vega",       285.32, "benefic",
+     "artistic gifts, idealism, charisma, and visionary leadership; magnetic aesthetic presence"),
+    ("Fomalhaut",  333.87, "benefic",
+     "Royal Star (Watcher of the South) — otherworldly idealism, spirituality, poetic gifts; highly sensitive and visionary"),
+    ("Scheat",     359.37, "malefic",
+     "risk of undoing through stubbornness or misfortune; themes of isolation, loss, or self-inflicted downfall"),
+]
+
 _LUNAR_PHASES = [
     (0,   45,  "New Moon",      "instinctive, subjective, seed-planting; life driven by pure potential and new beginnings"),
     (45,  90,  "Crescent",      "emerging from the past, striving to establish something new against resistance"),
@@ -500,6 +533,40 @@ def compute_sect(chart: dict) -> dict:
         planets_sect[planet] = {"sect": sect, "in_sect": in_sect, "role": role}
 
     return {"chart_type": "day" if is_day else "night", "planets": planets_sect}
+
+
+def compute_fixed_star_conjunctions(chart: dict, orb: float = 1.0) -> list[dict]:
+    """Return natal planets/angles conjunct significant fixed stars within `orb` degrees."""
+    bodies: dict[str, float] = {}
+    for planet in _PLANETS:
+        d = chart.get(planet)
+        if d and d.get("abs_pos") is not None:
+            bodies[planet] = d["abs_pos"]
+    for key in ("ascendant", "midheaven"):
+        d = chart.get(key)
+        if d and d.get("abs_pos") is not None:
+            bodies[key] = d["abs_pos"]
+    chiron = chart.get("chiron")
+    if chiron and chiron.get("abs_pos") is not None:
+        bodies["chiron"] = chiron["abs_pos"]
+    nn = chart.get("north_node")
+    if nn and nn.get("abs_pos") is not None:
+        bodies["north_node"] = nn["abs_pos"]
+
+    conjunctions = []
+    for star_name, star_pos, nature, keywords in _FIXED_STARS:
+        for body_name, body_pos in bodies.items():
+            actual_orb = _angular_diff(body_pos, star_pos)
+            if actual_orb <= orb:
+                conjunctions.append({
+                    "body": body_name,
+                    "star": star_name,
+                    "orb": round(actual_orb, 2),
+                    "nature": nature,
+                    "keywords": keywords,
+                })
+    conjunctions.sort(key=lambda x: x["orb"])
+    return conjunctions
 
 
 def compute_solar_arcs(natal_chart: dict, progressions: dict) -> dict:
@@ -973,8 +1040,9 @@ def compute_chart(
     chart["stelliums"] = compute_stelliums(chart)
     chart["mutual_receptions"] = compute_mutual_receptions(chart)
 
-    # Anaretic degrees and planetary sect
+    # Anaretic degrees, planetary sect, fixed star conjunctions
     chart["anaretic_degrees"] = compute_anaretic_degrees(chart)
     chart["sect"] = compute_sect(chart)
+    chart["fixed_stars"] = compute_fixed_star_conjunctions(chart)
 
     return chart
