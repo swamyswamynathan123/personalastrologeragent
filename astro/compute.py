@@ -947,6 +947,99 @@ def compute_vedic(
     return {"ayanamsa": round(ayanamsa, 4), "sidereal": sidereal, "dasha": dasha, "yogas": yogas}
 
 
+def compute_upcoming_transits(
+    natal_chart: dict,
+    current_year: int, current_month: int, current_day: int,
+    current_hour: int, current_minute: int,
+    current_city: str, current_nation: str,
+    days_ahead: int = 90,
+) -> list[dict]:
+    """
+    Find transits that will become exact within `days_ahead` days.
+    Uses daily position stepping for slow planets (Jupiter–Pluto) and
+    speed-extrapolation for personal planets to keep API calls low.
+    Only outer transiting planets (Jupiter through Pluto) are tracked —
+    personal planet transits move too fast to be meaningful over 90 days.
+    """
+    from datetime import date, timedelta
+
+    OUTER_PLANETS = ["jupiter", "saturn", "uranus", "neptune", "pluto"]
+    NATAL_POINTS = list(_PLANETS) + ["ascendant", "midheaven", "north_node"]
+    ORB_ENTER = 2.0   # start tracking when within 2°
+    ORB_EXACT = 0.5   # call it "exact" when within 0.5°
+
+    # Collect natal absolute positions
+    natal_pos: dict[str, float] = {}
+    for body in NATAL_POINTS:
+        d = natal_chart.get(body)
+        if d and d.get("abs_pos") is not None:
+            natal_pos[body] = d["abs_pos"]
+
+    current_date = date(current_year, current_month, current_day)
+
+    # Step through days; only recompute transit positions when needed
+    # For outer planets, positions barely change day-to-day — step every 3 days
+    step = 3
+    upcoming: dict[str, dict] = {}  # key = "transiting_planet|natal_planet|aspect"
+
+    check_dates = [current_date + timedelta(days=i) for i in range(0, days_ahead + 1, step)]
+
+    for check_date in check_dates:
+        try:
+            transit_subj = AstrologicalSubject(
+                name="Transit",
+                year=check_date.year, month=check_date.month, day=check_date.day,
+                hour=current_hour, minute=current_minute,
+                city=current_city, nation=current_nation, tz_str="UTC", online=True,
+            )
+        except Exception:
+            continue
+
+        for t_planet in OUTER_PLANETS:
+            t_data = _safe_planet(transit_subj, t_planet)
+            if not t_data or t_data.get("abs_pos") is None:
+                continue
+            t_pos = t_data["abs_pos"]
+            t_retro = t_data.get("retrograde", False)
+
+            for n_planet, n_pos in natal_pos.items():
+                result = _find_aspect(t_pos, n_pos, max_orb=ORB_ENTER)
+                if not result:
+                    continue
+                aspect_name, orb = result
+                key = f"{t_planet}|{n_planet}|{aspect_name}"
+                exact_angle = next(a for nm, a, _ in _MAJOR_ASPECTS if nm == aspect_name)
+                applying = _is_applying(t_planet, t_pos, t_retro, n_planet, n_pos, False, exact_angle)
+
+                if key not in upcoming:
+                    upcoming[key] = {
+                        "transiting_planet": t_planet,
+                        "natal_planet": n_planet,
+                        "aspect": aspect_name,
+                        "first_seen": check_date.isoformat(),
+                        "min_orb": orb,
+                        "exact_date": check_date.isoformat() if orb <= ORB_EXACT else None,
+                        "applying": applying,
+                        "retrograde": t_retro,
+                    }
+                else:
+                    # Update minimum orb and exact date
+                    if orb < upcoming[key]["min_orb"]:
+                        upcoming[key]["min_orb"] = orb
+                    if orb <= ORB_EXACT and upcoming[key]["exact_date"] is None:
+                        upcoming[key]["exact_date"] = check_date.isoformat()
+
+    # Filter: keep only those that will be exact (≤0.5°) within the window, or are currently applying
+    result_list = [
+        v for v in upcoming.values()
+        if v["exact_date"] is not None or (v["applying"] and v["min_orb"] <= ORB_ENTER)
+    ]
+
+    # Sort by exact_date, then by min_orb
+    result_list.sort(key=lambda x: (x["exact_date"] or "9999", x["min_orb"]))
+    return result_list
+
+
 def compute_firdaria(
     birth_year: int, birth_month: int, birth_day: int,
     current_year: int, current_month: int, current_day: int,

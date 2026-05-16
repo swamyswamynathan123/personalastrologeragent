@@ -375,6 +375,22 @@ def _format_progressions(prog: dict | None) -> str:
     return "\n".join(lines)
 
 
+def _format_upcoming_transits(upcoming: list[dict]) -> str:
+    if not upcoming:
+        return "No major outer-planet transits becoming exact within the next 90 days."
+    lines = []
+    for t in upcoming:
+        tp = t["transiting_planet"].capitalize()
+        np_ = t["natal_planet"].replace("_", " ").title()
+        exact = t.get("exact_date") or "within window"
+        retro = " (Rx)" if t.get("retrograde") else ""
+        orb = round(t.get("min_orb", 0), 2)
+        lines.append(
+            f"- {tp}{retro} {t['aspect']} natal {np_} — exact ~{exact} (min orb {orb}°)"
+        )
+    return "\n".join(lines)
+
+
 def _format_yogas(yogas: list[dict]) -> str:
     if not yogas:
         return "No major Vedic yogas detected in the sidereal chart."
@@ -473,6 +489,7 @@ def build_prompt(state: "AstrologerState") -> str:
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
         patterns_section = "## Aspect Patterns\n" + _format_aspect_patterns(chart.get("aspect_patterns") or [])
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
+        upcoming_section = "## Upcoming Transits (next 90 days — outer planets only)\n" + _format_upcoming_transits(chart.get("upcoming_transits") or [])
         progressions_section = "## Secondary Progressions\n" + _format_progressions(chart.get("progressions"))
         prog_aspects_section = "## Progressed Aspects to Natal Chart\n" + _format_progressed_aspects(chart.get("progressed_aspects") or [])
         solar_arcs_section = "## Solar Arc Directions\n" + _format_solar_arcs(chart.get("solar_arcs") or {})
@@ -485,7 +502,7 @@ def build_prompt(state: "AstrologerState") -> str:
             placements, anaretic_section, fixed_stars_section, ruler_section, balance_section, sect_section,
             lunar_phase_section, pof_section, stelliums_section, receptions_section,
             nodes_section, houses_section,
-            aspects_section, patterns_section, transits_section,
+            aspects_section, patterns_section, transits_section, upcoming_section,
             progressions_section, prog_aspects_section,
             solar_arcs_section, solar_arc_aspects_section,
             profection_section, firdaria_section, solar_return_section, vedic_section,
@@ -525,6 +542,7 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Solar arc aspects within 1°: concrete external turning points (applying = within ~1 year); distinct from the more interior story of progressions
 - Profection lord of the year: the single most important planet for the current 12-month period
 - Priority hierarchy: outer-planet transits/arcs to natal ASC/MC/Sun/Moon > outer to personal planets > inner planet transits
+- Upcoming transits (90-day window): these are the most actionable timing data — exact dates let you advise on specific windows. Mention the 2–3 most significant upcoming transits in Section 6 (Practical Guidance) with their approximate dates. A retrograde transiting planet (Rx) will often make the aspect 2–3 times; note this multi-pass pattern when present.
 - Birth time confidence: when "approximate" or "unknown", treat Ascendant, house cusps, and house-based interpretations as possibilities rather than certainties; note the uncertainty explicitly and weight sign-based interpretations (unaffected by birth time) more heavily
 - Solar return chart: the SR Ascendant and any angular planets are the dominant themes for the 12-month period from the return date; integrate the SR with the profection for a complete annual picture
 - Anaretic degree (29°): a planet or angle at 29° carries life-level urgency — a chronic drive to resolve unfinished business in that sign's themes before moving on; if the chart ruler, a luminary, or the Ascendant is anaretic, this urgency colors the entire chart and should be named in the overview
@@ -600,6 +618,7 @@ def _build_followup_messages(
             f"\n\nNatal Aspects:\n{_format_aspects(chart.get('aspects') or [])}"
             f"\n\nAspect Patterns:\n{_format_aspect_patterns(chart.get('aspect_patterns') or [])}"
             f"\n\nCurrent Transits:\n{_format_transits(chart.get('transits') or [])}"
+            f"\n\nUpcoming Transits (90 days):\n{_format_upcoming_transits(chart.get('upcoming_transits') or [])}"
             f"\n\nSecondary Progressions:\n{_format_progressions(chart.get('progressions'))}"
             f"\n\nProgressed Aspects to Natal:\n{_format_progressed_aspects(chart.get('progressed_aspects') or [])}"
             f"\n\nSolar Arc Directions:\n{_format_solar_arcs(chart.get('solar_arcs') or {})}"
