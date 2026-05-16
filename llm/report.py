@@ -375,6 +375,17 @@ def _format_progressions(prog: dict | None) -> str:
     return "\n".join(lines)
 
 
+def _format_yogas(yogas: list[dict]) -> str:
+    if not yogas:
+        return "No major Vedic yogas detected in the sidereal chart."
+    lines = []
+    for y in yogas:
+        planets_str = " + ".join(p.replace("_", " ").title() for p in y["planets"])
+        lines.append(f"- **{y['name']}** [{y['category']}] — {y['detail']}")
+        lines.append(f"  {y['description']}")
+    return "\n".join(lines)
+
+
 def _format_vedic(vedic: dict | None) -> str:
     if not vedic:
         return "Vedic (Jyotish) overlay unavailable."
@@ -417,6 +428,11 @@ def _format_vedic(vedic: dict | None) -> str:
             antar_end = (dasha.get("antardasha_end") or "")[:10]
             antar_rem = dasha.get("years_remaining_antardasha", "?")
             lines.append(f"- Antardasha (sub-period): {antar_label} (ends {antar_end}, {antar_rem} yrs remaining)")
+
+    yogas = vedic.get("yogas") or []
+    if yogas:
+        lines.append(f"\n**Vedic Yogas ({len(yogas)} detected):**")
+        lines.append(_format_yogas(yogas))
 
     return "\n".join(lines)
 
@@ -516,6 +532,7 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Firdaria: the major lord's natal condition (sign, house, dignity, retrograde status) determines the biographical chapter's quality and difficulty. The sub-lord adds a texture layer within the major period. If the Firdaria major lord = profection lord of the year, that planet is doubly activated and should be flagged as the single most important planet right now. A retrograde or debilitated Firdaria lord = a challenging multi-year chapter requiring inner work.
 - Vedic overlay: sidereal positions (Lahiri ayanamsa, ~24°) show where planets fall in the Jyotish zodiac — use these to add depth when the tropical and sidereal agree, or to note where the two systems diverge; the Moon's nakshatra is the most significant Vedic datum (governs Vimshottari timing and instinctive nature); the Navamsha (D9) shows soul-level qualities and marriage/dharma themes. Use Vedic data as a cross-system confirmation — note resonances, do not create contradictions with the Western reading.
 - Vimshottari Dasha: the Mahadasha (major period, 6–20 years) sets the biographical backdrop; the Antardasha (sub-period, months to years) is the current texture within it. If the Mahadasha lord is the same as the Firdaria major lord, this is a profound convergence across both traditions — name it explicitly as the chart's single most dominant current theme. If the Dasha lord is also the profection lord of the year, all three timing systems point to the same planet — this is exceptional and must be flagged.
+- Vedic Yogas: Pancha Mahapurusha yogas (Ruchaka/Bhadra/Hamsa/Malavya/Shasha) are among the most powerful signatures in Jyotish — a planet in its own sign or exaltation in an angular house (Kendra) creates exceptional talent in that planet's domain; integrate this with the Western chart's dominant planets and aspect patterns. Gajakesari Yoga (Jupiter in Kendra from Moon) is one of the most auspicious and common yogas — name it as a source of resilience and wisdom. Raj Yogas (Kendra-Trikona lord links) indicate potential for authority and worldly success; Parivartana Raj Yoga (sign exchange) is particularly potent. Neecha Bhanga Raj Yoga (cancelled debilitation) is a life-transforming signature — the early struggle described by the debilitation becomes the very source of exceptional strength. Dhana Yogas indicate financial capacity. Multiple yogas in the same chart compound each other. Name any yogas in Section 1 (Overview) if they involve the Sun, Moon, or Ascendant lord, or in Section 5 (Key Themes) if they involve other planets.
 - Fixed stars: only exact conjunctions (1° orb) matter — no other aspects. The 4 Royal Stars (Aldebaran, Regulus, Antares, Fomalhaut) conjunct a luminary or angle are life-defining signatures; Algol conjunct any personal planet or the Ascendant is the chart's most intense pressure point and must be named. Spica, Sirius, Vega near the Sun/Moon/Ascendant indicate distinctive gifts. Weave fixed stars into interpretation naturally — do not list them mechanically.
 
 ## Synthesis Protocol — Complete Mentally Before Writing

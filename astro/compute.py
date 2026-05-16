@@ -574,6 +574,245 @@ def compute_sect(chart: dict) -> dict:
     return {"chart_type": "day" if is_day else "night", "planets": planets_sect}
 
 
+_VEDIC_OWN_SIGNS: dict[str, set] = {
+    "sun":     {"Leo"},
+    "moon":    {"Cancer"},
+    "mars":    {"Aries", "Scorpio"},
+    "mercury": {"Gemini", "Virgo"},
+    "jupiter": {"Sagittarius", "Pisces"},
+    "venus":   {"Taurus", "Libra"},
+    "saturn":  {"Capricorn", "Aquarius"},
+}
+
+_VEDIC_EXALTATION: dict[str, str] = {
+    "sun": "Aries", "moon": "Taurus", "mars": "Capricorn",
+    "mercury": "Virgo", "jupiter": "Cancer",
+    "venus": "Pisces", "saturn": "Libra",
+}
+
+_VEDIC_DEBILITATION: dict[str, str] = {
+    "sun": "Libra", "moon": "Scorpio", "mars": "Cancer",
+    "mercury": "Pisces", "jupiter": "Capricorn",
+    "venus": "Virgo", "saturn": "Aries",
+}
+
+# Classical (Jyotish) sign rulerships — no outer planets
+_VEDIC_SIGN_RULER: dict[str, str] = {
+    "Aries": "mars", "Taurus": "venus", "Gemini": "mercury", "Cancer": "moon",
+    "Leo": "sun", "Virgo": "mercury", "Libra": "venus", "Scorpio": "mars",
+    "Sagittarius": "jupiter", "Capricorn": "saturn", "Aquarius": "saturn", "Pisces": "jupiter",
+}
+
+_KENDRA = {1, 4, 7, 10}
+_TRIKONA = {1, 5, 9}
+
+
+def compute_yogas(sidereal: dict) -> list[dict]:
+    """Detect major Vedic yogas using whole-sign houses from the sidereal Lagna."""
+    lagna = sidereal.get("ascendant")
+    if not lagna or lagna.get("sidereal_abs") is None:
+        return []
+
+    lagna_sign_idx = int(lagna["sidereal_abs"] / 30) % 12
+
+    def sid_sign(body: str) -> str | None:
+        d = sidereal.get(body)
+        return d.get("sign") if d else None
+
+    def vedic_house(body: str) -> int | None:
+        d = sidereal.get(body)
+        if not d or d.get("sidereal_abs") is None:
+            return None
+        sign_idx = int(d["sidereal_abs"] / 30) % 12
+        return ((sign_idx - lagna_sign_idx) % 12) + 1
+
+    def house_sign_lord(house_num: int) -> str:
+        sign = _SIGNS[(lagna_sign_idx + house_num - 1) % 12]
+        return _VEDIC_SIGN_RULER.get(sign, "")
+
+    yogas: list[dict] = []
+
+    # ── Pancha Mahapurusha Yogas ──────────────────────────────────────────
+    _PMP = [
+        ("mars",    "Ruchaka Yoga",
+         "Mars power yoga — exceptional courage, drive, leadership capacity, and physical vitality; a life defined by bold action and competitive excellence"),
+        ("mercury", "Bhadra Yoga",
+         "Mercury intellect yoga — extraordinary analytical brilliance, communication mastery, and business acumen; a natural teacher or strategist"),
+        ("jupiter", "Hamsa Yoga",
+         "Jupiter wisdom yoga — spiritual authority, teaching gifts, ethical stature, and a life that naturally attracts prosperity, respect, and wide influence"),
+        ("venus",   "Malavya Yoga",
+         "Venus grace yoga — artistic excellence, refined aesthetic sense, magnetic charm, and material comfort through creative gifts"),
+        ("saturn",  "Shasha Yoga",
+         "Saturn mastery yoga — authority built through sustained discipline, organizational power, and long-term perseverance; a life of earned achievement"),
+    ]
+    for planet, name, desc in _PMP:
+        sign = sid_sign(planet)
+        house = vedic_house(planet)
+        if not sign or not house:
+            continue
+        in_own = sign in _VEDIC_OWN_SIGNS.get(planet, set())
+        in_exalt = sign == _VEDIC_EXALTATION.get(planet)
+        if (in_own or in_exalt) and house in _KENDRA:
+            dignity = "own sign" if in_own else "exaltation"
+            yogas.append({
+                "name": name,
+                "planets": [planet],
+                "sign": sign,
+                "house": house,
+                "detail": f"{planet.capitalize()} in {dignity} in House {house} (Kendra)",
+                "description": desc,
+                "category": "Pancha Mahapurusha",
+            })
+
+    # ── Gajakesari Yoga ───────────────────────────────────────────────────
+    moon_h = vedic_house("moon")
+    jupiter_h = vedic_house("jupiter")
+    if moon_h and jupiter_h:
+        jup_from_moon = ((jupiter_h - moon_h) % 12) + 1
+        if jup_from_moon in _KENDRA:
+            moon_deb = sid_sign("moon") == _VEDIC_DEBILITATION.get("moon")
+            jup_deb = sid_sign("jupiter") == _VEDIC_DEBILITATION.get("jupiter")
+            strength = "weakened (debilitation)" if (moon_deb or jup_deb) else "strong"
+            yogas.append({
+                "name": "Gajakesari Yoga",
+                "planets": ["moon", "jupiter"],
+                "sign": f"Moon H{moon_h}, Jupiter H{jupiter_h}",
+                "house": moon_h,
+                "detail": f"Jupiter in House {jup_from_moon} from Moon ({strength})",
+                "description": "Moon-Jupiter Kendra yoga — wisdom, benevolence, natural popularity, and the capacity to inspire others; associated with emotional intelligence and lasting reputation",
+                "category": "Lunar",
+            })
+
+    # ── Raj Yoga (Kendra-Trikona lord conjunction or exchange) ────────────
+    kendra_exclusive = {h: house_sign_lord(h) for h in [4, 7, 10]}   # not Trikona
+    trikona_exclusive = {h: house_sign_lord(h) for h in [5, 9]}       # not Kendra
+    seen_raj: set = set()
+
+    for kh, kl in kendra_exclusive.items():
+        for th, tl in trikona_exclusive.items():
+            if not kl or not tl or kl == tl:
+                continue
+            pair = frozenset({kl, tl})
+            if pair in seen_raj:
+                continue
+            kl_sign = sid_sign(kl)
+            tl_sign = sid_sign(tl)
+            if not kl_sign or not tl_sign:
+                continue
+            # Conjunction
+            if kl_sign == tl_sign:
+                seen_raj.add(pair)
+                yogas.append({
+                    "name": "Raj Yoga",
+                    "planets": [kl, tl],
+                    "sign": kl_sign,
+                    "house": vedic_house(kl),
+                    "detail": f"H{kh} lord ({kl.capitalize()}) + H{th} lord ({tl.capitalize()}) conjunct in {kl_sign}",
+                    "description": f"Kendra-Trikona conjunction — lords of action (H{kh}) and fortune (H{th}) unite to create strong potential for success, authority, and achievement of life purpose",
+                    "category": "Raj Yoga",
+                })
+            # Parivartana (exchange)
+            elif _VEDIC_SIGN_RULER.get(kl_sign) == tl and _VEDIC_SIGN_RULER.get(tl_sign) == kl:
+                seen_raj.add(pair)
+                yogas.append({
+                    "name": "Raj Yoga (Parivartana)",
+                    "planets": [kl, tl],
+                    "sign": f"{kl.capitalize()} in {kl_sign} ↔ {tl.capitalize()} in {tl_sign}",
+                    "house": vedic_house(kl),
+                    "detail": f"H{kh} lord ({kl.capitalize()}) and H{th} lord ({tl.capitalize()}) exchange signs",
+                    "description": f"Parivartana Raj Yoga — Houses {kh} and {th} lords exchange signs, creating cooperative power that amplifies both the action principle (Kendra) and the fortune principle (Trikona) simultaneously",
+                    "category": "Raj Yoga",
+                })
+
+    # ── Neecha Bhanga Raj Yoga (debilitation cancellation) ───────────────
+    # Canceller = lord of the debilitation sign, or the planet exalted in that sign
+    _NEECHA_BHANGA: dict[str, tuple] = {
+        "sun":     ("venus",   "Libra"),
+        "moon":    ("mars",    "Scorpio"),
+        "mars":    ("moon",    "Cancer"),
+        "mercury": ("jupiter", "Pisces"),
+        "jupiter": ("saturn",  "Capricorn"),
+        "venus":   ("mercury", "Virgo"),
+        "saturn":  ("mars",    "Aries"),
+    }
+    for planet, (canceller, deb_sign) in _NEECHA_BHANGA.items():
+        if sid_sign(planet) != deb_sign:
+            continue
+        c_house = vedic_house(canceller)
+        if c_house and c_house in _KENDRA:
+            yogas.append({
+                "name": "Neecha Bhanga Raj Yoga",
+                "planets": [planet, canceller],
+                "sign": deb_sign,
+                "house": vedic_house(planet),
+                "detail": f"{planet.capitalize()} debilitated in {deb_sign}; {canceller.capitalize()} (canceller) in Kendra H{c_house}",
+                "description": f"{planet.capitalize()} in {deb_sign} (debilitated), but the debilitation is cancelled by {canceller.capitalize()} in a Kendra — early struggles transform into exceptional resilience and eventual strength in the themes of {deb_sign}",
+                "category": "Neecha Bhanga",
+            })
+
+    # ── Dhana Yoga (wealth — lords of 2 and 11 linked) ───────────────────
+    lord_2 = house_sign_lord(2)
+    lord_11 = house_sign_lord(11)
+    if lord_2 and lord_11 and lord_2 != lord_11:
+        l2_sign = sid_sign(lord_2)
+        l11_sign = sid_sign(lord_11)
+        l2_house = vedic_house(lord_2)
+        l11_house = vedic_house(lord_11)
+        if l2_sign and l11_sign:
+            # Conjunction
+            if l2_sign == l11_sign:
+                yogas.append({
+                    "name": "Dhana Yoga",
+                    "planets": [lord_2, lord_11],
+                    "sign": l2_sign,
+                    "house": l2_house,
+                    "detail": f"H2 lord ({lord_2.capitalize()}) + H11 lord ({lord_11.capitalize()}) conjunct in {l2_sign}",
+                    "description": "Wealth yoga — lords of the 2nd (accumulated wealth) and 11th (income, gains) houses unite, indicating strong potential for financial accumulation and material prosperity",
+                    "category": "Dhana Yoga",
+                })
+            # One lord placed in the other's house
+            elif l2_house == 11 or l11_house == 2:
+                detail = f"H2 lord in H11" if l2_house == 11 else f"H11 lord in H2"
+                yogas.append({
+                    "name": "Dhana Yoga",
+                    "planets": [lord_2, lord_11],
+                    "sign": l2_sign if l2_house == 11 else l11_sign,
+                    "house": l2_house if l2_house == 11 else l11_house,
+                    "detail": detail,
+                    "description": "Wealth yoga — a wealth house lord placed in the other wealth house creates a direct pipeline between accumulation (H2) and income (H11)",
+                    "category": "Dhana Yoga",
+                })
+
+    # ── Chandra-Mangala Yoga (Moon-Mars conjunction) ──────────────────────
+    if moon_h and vedic_house("mars") == moon_h:
+        yogas.append({
+            "name": "Chandra-Mangala Yoga",
+            "planets": ["moon", "mars"],
+            "sign": sid_sign("moon") or "",
+            "house": moon_h,
+            "detail": f"Moon and Mars conjunct in H{moon_h}",
+            "description": "Moon-Mars conjunction yoga — powerful emotional drive, entrepreneurial instinct, and financially motivated ambition; intensity of feeling fuels decisive action",
+            "category": "Conjunction Yoga",
+        })
+
+    # ── Budha-Aditya Yoga (Sun-Mercury conjunction) ───────────────────────
+    sun_sign = sid_sign("sun")
+    mercury_sign = sid_sign("mercury")
+    if sun_sign and sun_sign == mercury_sign:
+        sun_h = vedic_house("sun")
+        yogas.append({
+            "name": "Budha-Aditya Yoga",
+            "planets": ["sun", "mercury"],
+            "sign": sun_sign,
+            "house": sun_h,
+            "detail": f"Sun and Mercury conjunct in {sun_sign} (H{sun_h})",
+            "description": "Sun-Mercury conjunction yoga — solar confidence fused with sharp intellect; exceptional clarity of thought, effective communication, and leadership through intelligence",
+            "category": "Conjunction Yoga",
+        })
+
+    return yogas
+
+
 def lahiri_ayanamsa(year: int, month: int, day: int) -> float:
     """Lahiri (Chitrapaksha) ayanamsa — accurate ±0.5° for 1900–2100."""
     decimal_year = year + (month - 1) / 12.0 + (day - 1) / 365.25
@@ -703,7 +942,9 @@ def compute_vedic(
             current_year, current_month, current_day,
         )
 
-    return {"ayanamsa": round(ayanamsa, 4), "sidereal": sidereal, "dasha": dasha}
+    yogas = compute_yogas(sidereal)
+
+    return {"ayanamsa": round(ayanamsa, 4), "sidereal": sidereal, "dasha": dasha, "yogas": yogas}
 
 
 def compute_firdaria(
