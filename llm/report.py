@@ -120,6 +120,37 @@ def _format_houses(houses: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_solar_arcs(solar_arcs: dict) -> str:
+    if not solar_arcs:
+        return "Solar arc directions unavailable."
+    arc = solar_arcs.get("arc", 0)
+    lines = [f"(Solar arc: {arc}° — each degree ≈ 1 year of life)"]
+    for key, label in [
+        ("sun", "Arc Sun"), ("moon", "Arc Moon"), ("mercury", "Arc Mercury"),
+        ("venus", "Arc Venus"), ("mars", "Arc Mars"), ("jupiter", "Arc Jupiter"),
+        ("saturn", "Arc Saturn"), ("ascendant", "Arc Ascendant"), ("midheaven", "Arc Midheaven"),
+    ]:
+        data = solar_arcs.get(key)
+        if data:
+            dignity = f" [{data['dignity']}]" if data.get("dignity") else ""
+            lines.append(f"- {label}: {data['sign']} {data['position']}°{dignity}")
+        else:
+            lines.append(f"- {label}: unavailable")
+    return "\n".join(lines)
+
+
+def _format_solar_arc_aspects(aspects: list[dict]) -> str:
+    if not aspects:
+        return "No solar arc aspects within 1° orb of natal chart points."
+    lines = []
+    for a in aspects:
+        dp = a["directed_planet"].replace("arc_", "Arc ").replace("_", " ").title()
+        np_ = a["natal_planet"].replace("_", " ").title()
+        direction = "applying" if a.get("applying") else "separating"
+        lines.append(f"- {dp} {a['aspect']} natal {np_} (orb {a['orb']}°, {direction})")
+    return "\n".join(lines)
+
+
 def _format_aspect_patterns(patterns: list[dict]) -> str:
     if not patterns:
         return "No major aspect patterns detected."
@@ -216,8 +247,16 @@ def build_prompt(state: "AstrologerState") -> str:
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
         progressions_section = "## Secondary Progressions\n" + _format_progressions(chart.get("progressions"))
         prog_aspects_section = "## Progressed Aspects to Natal Chart\n" + _format_progressed_aspects(chart.get("progressed_aspects") or [])
+        solar_arcs_section = "## Solar Arc Directions\n" + _format_solar_arcs(chart.get("solar_arcs") or {})
+        solar_arc_aspects_section = "## Solar Arc Aspects to Natal Chart\n" + _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
         profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
-        chart_section = "\n\n".join([placements, ruler_section, balance_section, nodes_section, houses_section, aspects_section, patterns_section, transits_section, progressions_section, prog_aspects_section, profection_section])
+        chart_section = "\n\n".join([
+            placements, ruler_section, balance_section, nodes_section, houses_section,
+            aspects_section, patterns_section, transits_section,
+            progressions_section, prog_aspects_section,
+            solar_arcs_section, solar_arc_aspects_section,
+            profection_section,
+        ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
 
@@ -235,6 +274,7 @@ Chiron represents core wounds and healing gifts; interpret its sign, house, and 
 Progressed aspects to natal planets (1° orb) mark pivotal turning points — applying ones are currently activating.
 Aspect patterns (Grand Trine, T-Square, Grand Cross, Yod) are the dominant structural themes of the chart — address them prominently.
 The Annual Profection lord of the year is the single most important planet for the current 12-month period; weave it through timing and guidance.
+Solar arc aspects within 1° orb are major life events activating now; applying solar arc aspects are imminent (within ~1 year), separating ones just passed. Treat them as concrete external turning points distinct from the more interior story told by progressions.
 
 ## Person Details
 - **Full Name:** {state['full_name']}
@@ -286,6 +326,8 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         prog_aspects_text = _format_progressed_aspects(chart.get("progressed_aspects") or [])
         patterns_text = _format_aspect_patterns(chart.get("aspect_patterns") or [])
         profection_text = _format_profection(chart.get("profection"))
+        solar_arcs_text = _format_solar_arcs(chart.get("solar_arcs") or {})
+        solar_arc_aspects_text = _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
         chart_summary = (
             f"{placements}\n\nChart Ruler:\n{ruler_text}"
             f"\n\nLunar Nodes:\n{nodes_text}"
@@ -294,6 +336,8 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
             f"\n\nCurrent Transits:\n{transits_text}"
             f"\n\nSecondary Progressions:\n{prog_text}"
             f"\n\nProgressed Aspects to Natal:\n{prog_aspects_text}"
+            f"\n\nSolar Arc Directions:\n{solar_arcs_text}"
+            f"\n\nSolar Arc Aspects to Natal:\n{solar_arc_aspects_text}"
             f"\n\nAnnual Profection:\n{profection_text}"
         )
     else:

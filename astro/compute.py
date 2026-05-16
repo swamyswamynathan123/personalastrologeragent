@@ -319,6 +319,89 @@ def compute_progressed_aspects(natal_chart: dict, progressions: dict) -> list[di
     return aspects
 
 
+def compute_solar_arcs(natal_chart: dict, progressions: dict) -> dict:
+    """Solar arc directions: advance every natal body by the progressed Sun's arc."""
+    natal_sun = natal_chart.get("sun")
+    prog_sun = progressions.get("sun")
+    if not natal_sun or not prog_sun:
+        return {}
+    natal_sun_pos = natal_sun.get("abs_pos")
+    prog_sun_pos = prog_sun.get("abs_pos")
+    if natal_sun_pos is None or prog_sun_pos is None:
+        return {}
+
+    arc = (prog_sun_pos - natal_sun_pos) % 360
+    result: dict = {"arc": round(arc, 3)}
+
+    for body in list(_PLANETS) + ["chiron", "ascendant", "midheaven", "north_node"]:
+        natal_data = natal_chart.get(body)
+        if not natal_data or natal_data.get("abs_pos") is None:
+            continue
+        directed_abs = (natal_data["abs_pos"] + arc) % 360
+        directed_sign, directed_pos = _sign_from_abs_pos(directed_abs)
+        entry: dict = {"abs_pos": round(directed_abs, 2), "sign": directed_sign, "position": directed_pos}
+        dignity = _get_dignity(body, directed_sign)
+        if dignity:
+            entry["dignity"] = dignity
+        result[body] = entry
+
+    return result
+
+
+def compute_solar_arc_aspects(natal_chart: dict, solar_arcs: dict) -> list[dict]:
+    """Aspects between solar arc directed positions and natal points (1° orb)."""
+    if not solar_arcs:
+        return []
+
+    directed: dict[str, float] = {}
+    for body in list(_PLANETS) + ["chiron", "ascendant", "midheaven", "north_node"]:
+        data = solar_arcs.get(body)
+        if data and data.get("abs_pos") is not None:
+            directed[f"arc_{body}"] = data["abs_pos"]
+
+    natal: dict[str, float] = {}
+    for planet in _PLANETS:
+        d = natal_chart.get(planet)
+        if d and d.get("abs_pos") is not None:
+            natal[planet] = d["abs_pos"]
+    chiron = natal_chart.get("chiron")
+    if chiron and chiron.get("abs_pos") is not None:
+        natal["chiron"] = chiron["abs_pos"]
+    for key in ("ascendant", "midheaven"):
+        d = natal_chart.get(key)
+        if d and d.get("abs_pos") is not None:
+            natal[key] = d["abs_pos"]
+    nn = natal_chart.get("north_node")
+    if nn and nn.get("abs_pos") is not None:
+        natal["north_node"] = nn["abs_pos"]
+
+    aspects = []
+    for arc_name, arc_pos in directed.items():
+        for natal_name, natal_pos in natal.items():
+            result = _find_aspect(arc_pos, natal_pos, max_orb=_PROGRESSED_ORB)
+            if result:
+                aspect_name, orb = result
+                exact_angle = next(a for n, a, _ in _MAJOR_ASPECTS if n == aspect_name)
+                gap = (arc_pos - natal_pos) % 360
+                if gap > 180:
+                    gap -= 360
+                if exact_angle == 0:
+                    exact = 0.0
+                elif exact_angle == 180:
+                    exact = 180.0 if gap >= 0 else -180.0
+                else:
+                    exact = exact_angle if abs(gap - exact_angle) <= abs(gap + exact_angle) else -exact_angle
+                applying = (gap - exact) < 0
+                aspects.append({
+                    "directed_planet": arc_name,
+                    "natal_planet": natal_name,
+                    "aspect": aspect_name,
+                    "orb": orb,
+                    "applying": applying,
+                })
+    return aspects
+
+
 def compute_aspect_patterns(chart: dict, aspects: list[dict]) -> list[dict]:
     """Detect Grand Trine, T-Square, Grand Cross, and Yod configurations."""
     aspect_between: dict[frozenset, str] = {}

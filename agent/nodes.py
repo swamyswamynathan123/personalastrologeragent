@@ -113,6 +113,7 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_chart, compute_aspects, compute_transits,
             compute_progressions, compute_progressed_aspects,
             compute_aspect_patterns, compute_profection,
+            compute_solar_arcs, compute_solar_arc_aspects,
         )
 
         birth_dt = datetime.fromisoformat(state["parsed_birth_datetime"])
@@ -179,6 +180,17 @@ def compute_astro(state: "AstrologerState") -> dict:
                 chart["progressed_aspects"] = []
         except Exception:
             chart["progressed_aspects"] = []
+
+        try:
+            if chart.get("progressions"):
+                chart["solar_arcs"] = compute_solar_arcs(chart, chart["progressions"])
+                chart["solar_arc_aspects"] = compute_solar_arc_aspects(chart, chart["solar_arcs"])
+            else:
+                chart["solar_arcs"] = {}
+                chart["solar_arc_aspects"] = []
+        except Exception:
+            chart["solar_arcs"] = {}
+            chart["solar_arc_aspects"] = []
 
         try:
             current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
