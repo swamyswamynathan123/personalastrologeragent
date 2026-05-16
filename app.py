@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from agent.graph import graph
 from agent.state import AstrologerState
-from llm.report import answer_followup
+from llm.report import answer_followup_stream
 
 load_dotenv()
 
@@ -302,23 +302,44 @@ elif st.session_state.report_result:
     st.caption(f"Reading generated as of {result['parsed_current_datetime']}")
     st.divider()
 
-    # Natal chart wheel
+    # Chart wheels (natal + transit overlay)
     chart_svg = (result.get("chart_data") or {}).get("chart_svg") or ""
-    if chart_svg:
-        with st.expander("Natal Chart Wheel", expanded=True):
-            st.markdown(
-                f'<div style="background:#ffffff;border-radius:12px;padding:1.2rem 1rem;'
-                f'display:flex;justify-content:center;overflow:auto;">'
-                f'<div style="max-width:580px;width:100%;">{chart_svg}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            st.download_button(
-                label="Download Chart SVG",
-                data=chart_svg,
-                file_name=f"chart_{result['full_name'].replace(' ', '_')}.svg",
-                mime="image/svg+xml",
-            )
+    transit_svg = (result.get("chart_data") or {}).get("transit_svg") or ""
+    if chart_svg or transit_svg:
+        _svg_style = (
+            "background:#ffffff;border-radius:12px;padding:1.2rem 1rem;"
+            "display:flex;justify-content:center;overflow:auto;"
+        )
+        tab_labels = []
+        if chart_svg:
+            tab_labels.append("Natal Chart")
+        if transit_svg:
+            tab_labels.append("Transit Overlay")
+        chart_tabs = st.tabs(tab_labels)
+        tab_idx = 0
+        if chart_svg:
+            with chart_tabs[tab_idx]:
+                st.markdown(
+                    f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                st.download_button(
+                    "Download Natal SVG", data=chart_svg,
+                    file_name=f"natal_{result['full_name'].replace(' ', '_')}.svg",
+                    mime="image/svg+xml",
+                )
+            tab_idx += 1
+        if transit_svg:
+            with chart_tabs[tab_idx]:
+                st.markdown(
+                    f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                st.download_button(
+                    "Download Transit SVG", data=transit_svg,
+                    file_name=f"transit_{result['full_name'].replace(' ', '_')}.svg",
+                    mime="image/svg+xml",
+                )
         st.divider()
 
     # Report rendered in a styled card
@@ -327,13 +348,46 @@ elif st.session_state.report_result:
         unsafe_allow_html=True,
     )
 
-    # Download button
-    st.download_button(
-        label="Download Reading",
-        data=result["final_report"],
-        file_name=f"reading_{result['full_name'].replace(' ', '_')}.md",
-        mime="text/markdown",
-    )
+    # Downloads
+    import markdown as _md
+    _report_html_body = _md.markdown(result["final_report"], extensions=["extra"])
+    _chart_svg_block = (
+        f'<div style="display:flex;justify-content:center;margin:1.5rem 0;">'
+        f'<div style="max-width:560px;">{chart_svg}</div></div>'
+    ) if chart_svg else ""
+    _html_export = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Astrology Reading — {result['full_name']}</title>
+<style>
+  body{{font-family:Georgia,serif;max-width:820px;margin:0 auto;padding:2rem;color:#1a1a2e;line-height:1.8}}
+  h1{{color:#4a2d7a;border-bottom:2px solid #c8a8f8;padding-bottom:.5rem}}
+  h2{{color:#6644aa;margin-top:2rem}}
+  strong{{color:#4a2d7a}}
+  .meta{{color:#666;font-style:italic;margin-bottom:2rem}}
+  @media print{{body{{padding:1rem}}}}
+</style></head>
+<body>
+<h1>Natal Chart Reading for {result['full_name']}</h1>
+<p class="meta">Born {result['parsed_dob']} · {result['birth_location']} · Reading as of {result['parsed_current_datetime']}</p>
+{_chart_svg_block}
+{_report_html_body}
+</body></html>"""
+
+    dl_col1, dl_col2 = st.columns(2)
+    with dl_col1:
+        st.download_button(
+            label="Download as Markdown",
+            data=result["final_report"],
+            file_name=f"reading_{result['full_name'].replace(' ', '_')}.md",
+            mime="text/markdown",
+        )
+    with dl_col2:
+        st.download_button(
+            label="Download as HTML",
+            data=_html_export,
+            file_name=f"reading_{result['full_name'].replace(' ', '_')}.html",
+            mime="text/html",
+        )
 
     # Follow-up chat
     st.divider()
@@ -350,13 +404,9 @@ elif st.session_state.report_result:
             st.markdown(question)
 
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                answer = answer_followup(
-                    result,
-                    st.session_state.chat_history,
-                    question,
-                )
-            st.markdown(answer)
+            answer = st.write_stream(
+                answer_followup_stream(result, st.session_state.chat_history, question)
+            )
 
         st.session_state.chat_history.append({"role": "user", "content": question})
         st.session_state.chat_history.append({"role": "assistant", "content": answer})

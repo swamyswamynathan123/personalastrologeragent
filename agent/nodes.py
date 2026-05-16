@@ -115,7 +115,8 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_progressions, compute_progressed_aspects,
             compute_aspect_patterns, compute_profection,
             compute_solar_arcs, compute_solar_arc_aspects,
-            compute_solar_return, compute_firdaria, generate_chart_svg,
+            compute_solar_return, compute_firdaria,
+            generate_chart_svg, generate_transit_svg,
         )
 
         birth_dt = datetime.fromisoformat(state["parsed_birth_datetime"])
@@ -239,6 +240,23 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["chart_svg"] = ""
+
+        try:
+            current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+            current_parts = [p.strip() for p in state["current_location"].split(",")]
+            chart["transit_svg"] = generate_transit_svg(
+                full_name=state["full_name"],
+                birth_year=birth_dt.year, birth_month=birth_dt.month, birth_day=birth_dt.day,
+                birth_hour=birth_dt.hour, birth_minute=birth_dt.minute,
+                city=city, nation=nation,
+                tz_str=state.get("birth_time_timezone") or "UTC",
+                transit_year=current_dt.year, transit_month=current_dt.month, transit_day=current_dt.day,
+                transit_hour=current_dt.hour, transit_minute=current_dt.minute,
+                transit_city=current_parts[0],
+                transit_nation=current_parts[-1] if len(current_parts) > 1 else "",
+            )
+        except Exception:
+            chart["transit_svg"] = ""
 
         return {"chart_data": chart}
     except Exception:

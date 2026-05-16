@@ -503,9 +503,10 @@ Name 2–3 specific windows with approximate timing. For each: what it is good f
 """
 
 
-def answer_followup(state: "AstrologerState", chat_history: list[dict], question: str) -> str:
-    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-
+def _build_followup_messages(
+    state: "AstrologerState", chat_history: list[dict], question: str
+) -> list[dict]:
+    """Build the messages list for a follow-up question (shared by sync and stream variants)."""
     chart = state.get("chart_data") or {}
     if chart:
         placements = "\n".join([
@@ -519,45 +520,27 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
             _format_planet("Chiron", chart.get("chiron")),
             f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
         ])
-        nodes_text = _format_nodes(chart)
-        ruler_text = _format_chart_ruler(chart.get("chart_ruler"))
-        aspects_text = _format_aspects(chart.get("aspects") or [])
-        transits_text = _format_transits(chart.get("transits") or [])
-        prog_text = _format_progressions(chart.get("progressions"))
-        prog_aspects_text = _format_progressed_aspects(chart.get("progressed_aspects") or [])
-        patterns_text = _format_aspect_patterns(chart.get("aspect_patterns") or [])
-        profection_text = _format_profection(chart.get("profection"))
-        firdaria_text = _format_firdaria(chart.get("firdaria"), chart)
-        solar_arcs_text = _format_solar_arcs(chart.get("solar_arcs") or {})
-        solar_arc_aspects_text = _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
-        solar_return_text = _format_solar_return(chart.get("solar_return") or {})
-        lunar_phase_text = _format_lunar_phase(chart.get("lunar_phase") or {})
-        pof_text = _format_part_of_fortune(chart.get("part_of_fortune"))
-        stelliums_text = _format_stelliums(chart.get("stelliums") or [])
-        receptions_text = _format_mutual_receptions(chart.get("mutual_receptions") or [])
-        anaretic_text = _format_anaretic_degrees(chart.get("anaretic_degrees") or [])
-        fixed_stars_text = _format_fixed_stars(chart.get("fixed_stars") or [])
-        sect_text = _format_sect(chart.get("sect") or {})
         chart_summary = (
-            f"{placements}\n\nAnaretic Degrees (29°):\n{anaretic_text}"
-            f"\n\nFixed Star Conjunctions:\n{fixed_stars_text}"
-            f"\n\nPlanetary Sect:\n{sect_text}"
-            f"\n\nChart Ruler:\n{ruler_text}"
-            f"\n\nLunar Phase:\n{lunar_phase_text}"
-            f"\n\nPart of Fortune:\n{pof_text}"
-            f"\n\nStelliums:\n{stelliums_text}"
-            f"\n\nMutual Receptions:\n{receptions_text}"
-            f"\n\nLunar Nodes:\n{nodes_text}"
-            f"\n\nNatal Aspects:\n{aspects_text}"
-            f"\n\nAspect Patterns:\n{patterns_text}"
-            f"\n\nCurrent Transits:\n{transits_text}"
-            f"\n\nSecondary Progressions:\n{prog_text}"
-            f"\n\nProgressed Aspects to Natal:\n{prog_aspects_text}"
-            f"\n\nSolar Arc Directions:\n{solar_arcs_text}"
-            f"\n\nSolar Arc Aspects to Natal:\n{solar_arc_aspects_text}"
-            f"\n\nAnnual Profection:\n{profection_text}"
-            f"\n\nFirdaria Time Lords:\n{firdaria_text}"
-            f"\n\nSolar Return Chart:\n{solar_return_text}"
+            f"{placements}"
+            f"\n\nAnaretic Degrees (29°):\n{_format_anaretic_degrees(chart.get('anaretic_degrees') or [])}"
+            f"\n\nFixed Star Conjunctions:\n{_format_fixed_stars(chart.get('fixed_stars') or [])}"
+            f"\n\nPlanetary Sect:\n{_format_sect(chart.get('sect') or {})}"
+            f"\n\nChart Ruler:\n{_format_chart_ruler(chart.get('chart_ruler'))}"
+            f"\n\nLunar Phase:\n{_format_lunar_phase(chart.get('lunar_phase') or {})}"
+            f"\n\nPart of Fortune:\n{_format_part_of_fortune(chart.get('part_of_fortune'))}"
+            f"\n\nStelliums:\n{_format_stelliums(chart.get('stelliums') or [])}"
+            f"\n\nMutual Receptions:\n{_format_mutual_receptions(chart.get('mutual_receptions') or [])}"
+            f"\n\nLunar Nodes:\n{_format_nodes(chart)}"
+            f"\n\nNatal Aspects:\n{_format_aspects(chart.get('aspects') or [])}"
+            f"\n\nAspect Patterns:\n{_format_aspect_patterns(chart.get('aspect_patterns') or [])}"
+            f"\n\nCurrent Transits:\n{_format_transits(chart.get('transits') or [])}"
+            f"\n\nSecondary Progressions:\n{_format_progressions(chart.get('progressions'))}"
+            f"\n\nProgressed Aspects to Natal:\n{_format_progressed_aspects(chart.get('progressed_aspects') or [])}"
+            f"\n\nSolar Arc Directions:\n{_format_solar_arcs(chart.get('solar_arcs') or {})}"
+            f"\n\nSolar Arc Aspects to Natal:\n{_format_solar_arc_aspects(chart.get('solar_arc_aspects') or [])}"
+            f"\n\nAnnual Profection:\n{_format_profection(chart.get('profection'))}"
+            f"\n\nFirdaria Time Lords:\n{_format_firdaria(chart.get('firdaria'), chart)}"
+            f"\n\nSolar Return Chart:\n{_format_solar_return(chart.get('solar_return') or {})}"
         )
     else:
         chart_summary = "Natal chart data unavailable."
@@ -574,21 +557,32 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         "- Do NOT invent placements, aspects, or transits not listed in the chart data above\n"
         "- Speak directly to the person: warm, concise, and actionable"
     )
-
-    messages = [
+    return [
         {"role": "system", "content": system},
         {"role": "assistant", "content": state["final_report"]},
         *chat_history,
         {"role": "user", "content": question},
     ]
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        max_tokens=1024,
-        messages=messages,
-    )
 
+def answer_followup(state: "AstrologerState", chat_history: list[dict], question: str) -> str:
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    messages = _build_followup_messages(state, chat_history, question)
+    response = client.chat.completions.create(model="gpt-4o", max_tokens=1024, messages=messages)
     return response.choices[0].message.content
+
+
+def answer_followup_stream(state: "AstrologerState", chat_history: list[dict], question: str):
+    """Streaming variant — yields text chunks for use with st.write_stream()."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    messages = _build_followup_messages(state, chat_history, question)
+    with client.chat.completions.create(
+        model="gpt-4o", max_tokens=1024, stream=True, messages=messages
+    ) as stream:
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield content
 
 
 def generate_report(state: "AstrologerState") -> str:

@@ -616,6 +616,35 @@ def compute_firdaria(
     }
 
 
+def generate_transit_svg(
+    full_name: str,
+    birth_year: int, birth_month: int, birth_day: int,
+    birth_hour: int, birth_minute: int,
+    city: str, nation: str, tz_str: str,
+    transit_year: int, transit_month: int, transit_day: int,
+    transit_hour: int, transit_minute: int,
+    transit_city: str, transit_nation: str,
+) -> str:
+    """Render a transit chart overlay SVG (natal wheel + current sky) via kerykeion."""
+    try:
+        from kerykeion import KerykeionChartSVG
+        natal = AstrologicalSubject(
+            name=full_name,
+            year=birth_year, month=birth_month, day=birth_day,
+            hour=birth_hour, minute=birth_minute,
+            city=city, nation=nation, tz_str=tz_str, online=True,
+        )
+        transit = AstrologicalSubject(
+            name="Current Sky",
+            year=transit_year, month=transit_month, day=transit_day,
+            hour=transit_hour, minute=transit_minute,
+            city=transit_city, nation=transit_nation, tz_str="UTC", online=True,
+        )
+        return KerykeionChartSVG(natal, transit, chart_type="Transit").makeTemplate()
+    except Exception:
+        return ""
+
+
 def generate_chart_svg(
     full_name: str,
     birth_year: int, birth_month: int, birth_day: int,
