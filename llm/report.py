@@ -10,6 +10,21 @@ if TYPE_CHECKING:
 
 load_dotenv()
 
+_HOUSE_THEMES = {
+    1: "Self, Identity, Appearance",
+    2: "Resources, Values, Money",
+    3: "Communication, Siblings, Short Travel",
+    4: "Home, Family, Roots",
+    5: "Creativity, Romance, Children, Pleasure",
+    6: "Work, Health, Service, Daily Routines",
+    7: "Partnerships, Marriage, Open Enemies",
+    8: "Transformation, Shared Resources, Sexuality, Rebirth",
+    9: "Philosophy, Higher Education, Long Travel, Beliefs",
+    10: "Career, Public Reputation, Authority",
+    11: "Friendships, Groups, Hopes, Social Causes",
+    12: "Hidden Matters, Spirituality, Self-Undoing, Karma",
+}
+
 
 def _format_planet(label: str, data: dict | None) -> str:
     if not data:
@@ -24,9 +39,10 @@ def _format_aspects(aspects: list[dict]) -> str:
         return "No major natal aspects computed."
     lines = []
     for a in aspects:
-        p1 = a["planet1"].capitalize()
-        p2 = a["planet2"].capitalize()
-        lines.append(f"- {p1} {a['aspect']} {p2} (orb {a['orb']}°)")
+        p1 = a["planet1"].replace("_", " ").title()
+        p2 = a["planet2"].replace("_", " ").title()
+        direction = "applying" if a.get("applying") else "separating"
+        lines.append(f"- {p1} {a['aspect']} {p2} (orb {a['orb']}°, {direction})")
     return "\n".join(lines)
 
 
@@ -37,7 +53,38 @@ def _format_transits(transits: list[dict]) -> str:
     for t in transits:
         tp = t["transiting_planet"].capitalize()
         np_ = t["natal_planet"].capitalize()
-        lines.append(f"- Transiting {tp} {t['aspect']} natal {np_} (orb {t['orb']}°)")
+        direction = "applying" if t.get("applying") else "separating"
+        lines.append(f"- Transiting {tp} {t['aspect']} natal {np_} (orb {t['orb']}°, {direction})")
+    return "\n".join(lines)
+
+
+def _format_nodes(chart: dict) -> str:
+    nn = chart.get("north_node")
+    sn = chart.get("south_node")
+    lines = []
+    if nn:
+        house = f", House {nn['house']}" if nn.get("house") else ""
+        lines.append(f"- North Node (Life Direction / Future Path): {nn['sign']} {nn['position']}°{house}")
+    else:
+        lines.append("- North Node: unavailable")
+    if sn:
+        lines.append(f"- South Node (Past Karma / Innate Gifts): {sn['sign']} {sn['position']}°")
+    else:
+        lines.append("- South Node: unavailable")
+    return "\n".join(lines)
+
+
+def _format_houses(houses: dict) -> str:
+    if not houses:
+        return "House cusp data unavailable."
+    lines = []
+    for num in range(1, 13):
+        h = houses.get(str(num))
+        theme = _HOUSE_THEMES.get(num, "")
+        if h and h.get("sign"):
+            lines.append(f"- House {num} ({theme}): {h['sign']} {h['position']}°")
+        else:
+            lines.append(f"- House {num} ({theme}): unavailable")
     return "\n".join(lines)
 
 
@@ -46,9 +93,8 @@ def build_prompt(state: "AstrologerState") -> str:
     focus = state.get("report_focus") or "general life reading"
     additional = state.get("additional_info") or ""
 
-    chart_section = ""
     if chart:
-        placements = [
+        placements = "\n".join([
             "## Natal Chart Placements",
             _format_planet("Sun", chart.get("sun")),
             _format_planet("Moon", chart.get("moon")),
@@ -62,10 +108,12 @@ def build_prompt(state: "AstrologerState") -> str:
             _format_planet("Uranus", chart.get("uranus")),
             _format_planet("Neptune", chart.get("neptune")),
             _format_planet("Pluto", chart.get("pluto")),
-        ]
-        aspects_section = ["", "## Natal Aspects", _format_aspects(chart.get("aspects") or [])]
-        transits_section = ["", "## Current Transits (as of report date)", _format_transits(chart.get("transits") or [])]
-        chart_section = "\n".join(placements + aspects_section + transits_section)
+        ])
+        nodes_section = "## Lunar Nodes\n" + _format_nodes(chart)
+        houses_section = "## House Cusps\n" + _format_houses(chart.get("houses") or {})
+        aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
+        transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
+        chart_section = "\n\n".join([placements, nodes_section, houses_section, aspects_section, transits_section])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
 
@@ -75,6 +123,7 @@ def build_prompt(state: "AstrologerState") -> str:
 
 Generate a comprehensive, personalized astrological reading for the person below.
 Only use the chart data provided — do NOT invent placements, transits, or aspects not listed here.
+For aspects: applying aspects (planets still moving toward exact) are currently intensifying; separating aspects are past their peak and more ingrained.
 
 ## Person Details
 - **Full Name:** {state['full_name']}
@@ -90,11 +139,12 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 
 ## Instructions
 Write the report in clear, friendly, professional language. Structure it with these sections:
-1. **Personal Overview** — Core personality traits from Sun, Moon, and Ascendant placements
-2. **Current Cosmic Climate** — What the skies say for this person right now, based on the report date
-3. **Key Life Themes** — 3–4 dominant themes active in their chart at this time
-4. **Practical Guidance** — Specific, actionable advice for the coming weeks
-5. **Favorable Timing** — Suggest favorable days or periods in the near future based on their chart
+1. **Personal Overview** — Core personality traits from Sun, Moon, Ascendant, and key natal aspects
+2. **Life Direction & Karmic Themes** — Insights from the North/South Node axis and 12th/8th house placements
+3. **Current Cosmic Climate** — Active transits (applying ones are most urgent), and what they mean for this person now
+4. **Key Life Themes** — 3–4 dominant themes from house rulers, stelliums, and applying natal aspects
+5. **Practical Guidance** — Specific, actionable advice for the coming weeks grounded in the active transits
+6. **Favorable Timing** — Suggest favorable days or periods based on applying transits and chart patterns
 
 Tone: warm, empowering, specific to this individual. Do not make vague generalizations.
 """
@@ -115,9 +165,14 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
             _format_planet("Saturn", chart.get("saturn")),
             f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
         ])
+        nodes_text = _format_nodes(chart)
         aspects_text = _format_aspects(chart.get("aspects") or [])
         transits_text = _format_transits(chart.get("transits") or [])
-        chart_summary = f"{placements}\n\nNatal Aspects:\n{aspects_text}\n\nCurrent Transits:\n{transits_text}"
+        chart_summary = (
+            f"{placements}\n\nLunar Nodes:\n{nodes_text}"
+            f"\n\nNatal Aspects:\n{aspects_text}"
+            f"\n\nCurrent Transits:\n{transits_text}"
+        )
     else:
         chart_summary = "Natal chart data unavailable."
 
@@ -125,8 +180,9 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
         f"You are an expert Western astrologer. You have already provided a full reading for "
         f"{state['full_name']} (born {state['parsed_dob']} in {state['birth_location']}, "
         f"birth time {state['birth_time']} {state.get('birth_time_timezone', '')}).\n\n"
-        f"Their natal chart:\n{chart_summary}\n\n"
+        f"Their chart data:\n{chart_summary}\n\n"
         "Answer the user's follow-up questions based on their chart and your previous reading. "
+        "Applying aspects and transits are currently intensifying — prioritize these when discussing timing. "
         "Be specific and grounded in the chart data — do NOT invent placements not listed above. "
         "Keep responses warm, concise, and actionable."
     )
