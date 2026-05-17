@@ -195,6 +195,10 @@ if "_chart_cache_key" not in st.session_state:
     st.session_state._chart_cache_key = None
 if "_chart_cache_prepared" not in st.session_state:
     st.session_state._chart_cache_prepared = None
+if "_synastry_cache_key" not in st.session_state:
+    st.session_state._synastry_cache_key = None
+if "_synastry_cache_prepared" not in st.session_state:
+    st.session_state._synastry_cache_prepared = None
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
@@ -628,44 +632,63 @@ with synastry_tab:
                 for err in b_errors:
                     st.warning(err)
             else:
-                try:
-                    _tz_b = pytz.timezone(b_timezone)
-                    _b_dt = _tz_b.localize(datetime(
-                        b_dob.year, b_dob.month, b_dob.day,
-                        b_birth_time.hour, b_birth_time.minute,
-                    ))
-                    b_parts = [p.strip() for p in b_location.split(",")]
-                    b_city = b_parts[0]
-                    b_nation = b_parts[-1] if len(b_parts) > 1 else ""
+                _syn_cache_key = (
+                    st.session_state._chart_cache_key,
+                    (b_name or "").strip().lower(),
+                    b_dob.strftime("%Y-%m-%d") if b_dob else None,
+                    (b_location or "").strip().lower(),
+                    b_birth_time.strftime("%H:%M") if b_birth_time else None,
+                    b_timezone,
+                )
 
-                    with st.spinner("Computing charts and synastry... ✨"):
-                        chart_b = compute_chart(
-                            full_name=b_name.strip(),
-                            birth_year=_b_dt.year,
-                            birth_month=_b_dt.month,
-                            birth_day=_b_dt.day,
-                            birth_hour=_b_dt.hour,
-                            birth_minute=_b_dt.minute,
-                            city=b_city,
-                            nation=b_nation,
-                            tz_str=b_timezone,
-                            house_system=result_a.get("house_system") or "Placidus",
-                        )
-                        synastry = compute_synastry(chart_a, chart_b)
+                if (
+                    _syn_cache_key == st.session_state._synastry_cache_key
+                    and st.session_state._synastry_cache_prepared is not None
+                ):
+                    st.session_state._synastry_prepared = st.session_state._synastry_cache_prepared
+                    st.info("Charts cached — regenerating synastry report.", icon="⚡")
+                else:
+                    try:
+                        _tz_b = pytz.timezone(b_timezone)
+                        _b_dt = _tz_b.localize(datetime(
+                            b_dob.year, b_dob.month, b_dob.day,
+                            b_birth_time.hour, b_birth_time.minute,
+                        ))
+                        b_parts = [p.strip() for p in b_location.split(",")]
+                        b_city = b_parts[0]
+                        b_nation = b_parts[-1] if len(b_parts) > 1 else ""
 
-                    st.session_state._synastry_prepared = {
-                        "name_a": result_a["full_name"],
-                        "dob_a": result_a["parsed_dob"],
-                        "loc_a": result_a["birth_location"],
-                        "chart_a": chart_a,
-                        "name_b": b_name.strip(),
-                        "dob_b": b_dob.strftime("%Y-%m-%d"),
-                        "loc_b": b_location.strip(),
-                        "chart_b": chart_b,
-                        "synastry": synastry,
-                    }
-                except Exception as exc:
-                    st.session_state.synastry_error = str(exc)
+                        with st.spinner("Computing charts and synastry... ✨"):
+                            chart_b = compute_chart(
+                                full_name=b_name.strip(),
+                                birth_year=_b_dt.year,
+                                birth_month=_b_dt.month,
+                                birth_day=_b_dt.day,
+                                birth_hour=_b_dt.hour,
+                                birth_minute=_b_dt.minute,
+                                city=b_city,
+                                nation=b_nation,
+                                tz_str=b_timezone,
+                                house_system=result_a.get("house_system") or "Placidus",
+                            )
+                            synastry = compute_synastry(chart_a, chart_b)
+
+                        _syn_prep = {
+                            "name_a": result_a["full_name"],
+                            "dob_a": result_a["parsed_dob"],
+                            "loc_a": result_a["birth_location"],
+                            "chart_a": chart_a,
+                            "name_b": b_name.strip(),
+                            "dob_b": b_dob.strftime("%Y-%m-%d"),
+                            "loc_b": b_location.strip(),
+                            "chart_b": chart_b,
+                            "synastry": synastry,
+                        }
+                        st.session_state._synastry_prepared = _syn_prep
+                        st.session_state._synastry_cache_key = _syn_cache_key
+                        st.session_state._synastry_cache_prepared = _syn_prep
+                    except Exception as exc:
+                        st.session_state.synastry_error = str(exc)
 
         if st.session_state.synastry_error:
             st.error(f"An error occurred: {st.session_state.synastry_error}")

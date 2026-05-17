@@ -1,5 +1,5 @@
 import pytest
-from llm.report import _compute_convergences
+from llm.report import _compute_convergences, _compute_synastry_convergences
 
 
 _BASE_STATE = {
@@ -185,3 +185,143 @@ def test_all_none_fields_no_crash():
     c = _chart(None, None, None)
     results = _compute_convergences(c, _BASE_STATE)
     assert isinstance(results, list)
+
+
+# =============================================================================
+# _compute_synastry_convergences
+# =============================================================================
+
+_NAME_A = "Alice"
+_NAME_B = "Bob"
+_CHART_A: dict = {}
+_CHART_B: dict = {}
+
+
+def _syn(cross_aspects=None, overlays_b_in_a=None, overlays_a_in_b=None, composite=None):
+    return {
+        "cross_aspects": cross_aspects or [],
+        "house_overlays_b_in_a": overlays_b_in_a or [],
+        "house_overlays_a_in_b": overlays_a_in_b or [],
+        "composite": composite or {},
+        "composite_aspects": [],
+    }
+
+
+def _aspect(planet_a, planet_b, aspect="conjunction", orb="1.0", applying=True):
+    return {"planet_a": planet_a, "planet_b": planet_b, "aspect": aspect,
+            "orb": orb, "applying": applying}
+
+
+# --- Sun-Moon inter-aspects ---
+
+def test_mutual_luminaries_detected():
+    s = _syn(cross_aspects=[
+        _aspect("sun", "moon"),
+        _aspect("moon", "sun"),
+    ])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert any("MUTUAL LUMINARIES" in r for r in results)
+
+
+def test_single_sun_moon_aspect_detected():
+    s = _syn(cross_aspects=[_aspect("sun", "moon")])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert any("SUN-MOON INTER-ASPECT" in r for r in results)
+
+
+def test_no_sun_moon_aspect_not_flagged():
+    s = _syn(cross_aspects=[_aspect("venus", "mars")])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert not any("SUN-MOON" in r or "MUTUAL LUMINARIES" in r for r in results)
+
+
+# --- Double whammy ---
+
+def test_double_whammy_detected():
+    s = _syn(cross_aspects=[
+        _aspect("venus", "mars", "conjunction"),
+        _aspect("mars", "venus", "trine"),
+    ])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert any("DOUBLE WHAMMY" in r for r in results)
+
+
+def test_single_venus_mars_not_double_whammy():
+    s = _syn(cross_aspects=[_aspect("venus", "mars")])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert not any("DOUBLE WHAMMY" in r for r in results)
+
+
+def test_double_whammy_excludes_sun_moon_pair():
+    # sun-moon handled separately — should NOT also appear as a double whammy
+    s = _syn(cross_aspects=[
+        _aspect("sun", "moon"),
+        _aspect("moon", "sun"),
+    ])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert not any("DOUBLE WHAMMY" in r for r in results)
+
+
+# --- Saturn contacts ---
+
+def test_saturn_square_sun_flagged():
+    s = _syn(cross_aspects=[_aspect("saturn", "sun", "square")])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert any("SATURN-LUMINARY" in r for r in results)
+
+
+def test_saturn_trine_sun_not_flagged():
+    s = _syn(cross_aspects=[_aspect("saturn", "sun", "trine")])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert not any("SATURN-LUMINARY" in r for r in results)
+
+
+def test_saturn_opposite_moon_flagged():
+    s = _syn(cross_aspects=[_aspect("moon", "saturn", "opposition")])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert any("SATURN-LUMINARY" in r for r in results)
+
+
+# --- Angular overlays ---
+
+def test_angular_overlay_single_detected():
+    s = _syn(overlays_b_in_a=[{"planet": "sun", "sign": "Aries", "house_in_partner": 1}])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert any("ANGULAR OVERLAY" in r for r in results)
+
+
+def test_angular_saturation_three_planets():
+    overlays = [
+        {"planet": "sun", "sign": "Aries", "house_in_partner": 1},
+        {"planet": "moon", "sign": "Cancer", "house_in_partner": 7},
+        {"planet": "venus", "sign": "Taurus", "house_in_partner": 10},
+    ]
+    s = _syn(overlays_b_in_a=overlays)
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert any("ANGULAR SATURATION" in r for r in results)
+
+
+def test_non_angular_overlay_not_flagged():
+    s = _syn(overlays_b_in_a=[{"planet": "sun", "sign": "Aries", "house_in_partner": 3}])
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert not any("ANGULAR" in r for r in results)
+
+
+# --- Composite angular planets ---
+
+def test_composite_angular_planet_detected():
+    s = _syn(composite={"sun": {"sign": "Aries", "position": "15", "house": 1}})
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert any("COMPOSITE ANGULAR" in r for r in results)
+
+
+def test_composite_non_angular_not_flagged():
+    s = _syn(composite={"sun": {"sign": "Aries", "position": "15", "house": 3}})
+    results = _compute_synastry_convergences(_NAME_A, _CHART_A, _NAME_B, _CHART_B, s)
+    assert not any("COMPOSITE ANGULAR" in r for r in results)
+
+
+def test_empty_synastry_no_crash():
+    results = _compute_synastry_convergences(_NAME_A, {}, _NAME_B, {}, {})
+    assert isinstance(results, list)
+    assert results == []

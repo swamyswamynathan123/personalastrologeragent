@@ -709,6 +709,15 @@ def build_prompt(state: "AstrologerState") -> str:
 
     additional_section = f"\n**Additional Context from User:** {additional}" if additional else ""
 
+    confidence = state.get("birth_time_confidence") or "exact"
+    if confidence in ("approximate", "unknown"):
+        rectification_section = f"""
+
+**8. Narrowing Your Birth Time** *(Birth time marked as "{confidence}" — add this section)*
+Using the chart data above (Firdaria periods, profection years, and transit dates), give 3–4 specific life-event checkpoints this person can use to confirm their Ascendant. For example: "If [Firdaria lord] ruled a period when a major [house theme] event occurred around [year range], this confirms [Ascendant candidate]." Name the 2 most likely Ascendant signs given a ±{30 if confidence == "approximate" else 90}-minute birth time window around {state.get("birth_time", "the stated time")}. Close with: *"Once confirmed, regenerate this reading with 'exact' confidence for precise house-based interpretations."* Keep the section to 5–7 sentences."""
+    else:
+        rectification_section = ""
+
     convergence_block = ""
     if convergences:
         convergence_block = (
@@ -803,7 +812,7 @@ Each theme must be supported by at least 2 independent chart factors. Draw from 
 
 **7. Favorable Timing**
 Name 2–3 specific windows with approximate timing. For each: what it is good for and why (cite the activating aspect). If the progressed Moon changes signs within 6 months, name the transition as a fresh emotional chapter and what it opens up.
-"""
+{rectification_section}"""
 
 
 def _build_followup_messages(
