@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import re
 from typing import TYPE_CHECKING
 
 import openai
@@ -1421,6 +1422,200 @@ def _build_followup_messages(
     ]
 
 
+# ── Event-prediction detection ───────────────────────────────────────────────
+
+_EVENT_TRIGGER = re.compile(
+    r"\b(will i|will we|should i|should we|am i going to|are we going to"
+    r"|is .{0,25} good for|good time to|when should i|when will|when is the best"
+    r"|chance of|likelihood of|going to happen|predict|forecast"
+    r"|favorable|favourable|timing for|ready for|right time to)\b",
+    re.IGNORECASE,
+)
+
+_CAREER_RE = re.compile(
+    r"\b(job|career|work|promotion|interview|business|launch|project"
+    r"|quit|resign|fired|hired|raise|salary|client|freelance|entrepreneur)\b",
+    re.IGNORECASE,
+)
+_RELATIONSHIP_RE = re.compile(
+    r"\b(relationship|marri(age|ed)|wedding|partner|love|romance|date|dating"
+    r"|breakup|divorce|meet someone|engagement|proposal|baby|pregnancy|commit)\b",
+    re.IGNORECASE,
+)
+_FINANCE_RE = re.compile(
+    r"\b(money|finance|invest|investment|buy|purchase|sell|stock|crypto"
+    r"|loan|debt|savings|wealth|real estate|property)\b",
+    re.IGNORECASE,
+)
+_HEALTH_RE = re.compile(
+    r"\b(health|surgery|illness|healing|recovery|energy|vitality|medical"
+    r"|doctor|treatment|hospital|wellness)\b",
+    re.IGNORECASE,
+)
+_TRAVEL_RE = re.compile(
+    r"\b(travel|trip|move|relocate|relocation|abroad|foreign|flight|visa"
+    r"|immigration|emigration)\b",
+    re.IGNORECASE,
+)
+_CREATIVITY_RE = re.compile(
+    r"\b(creative|art|music|write|book|film|performance|show|exhibit"
+    r"|publish(ed|ing)?|release|launch)\b",
+    re.IGNORECASE,
+)
+
+_EVENT_HOUSE_MAP = {
+    "career": {
+        "houses": "10th (career/MC), 2nd (income), 6th (work/service)",
+        "planets": "MC sign + ruler, 10th house ruler, Saturn, Sun",
+    },
+    "relationship": {
+        "houses": "7th (partnership), 5th (romance/dates), 11th (friendship→love)",
+        "planets": "Venus, 7th house ruler, Juno",
+    },
+    "finance": {
+        "houses": "2nd (personal income), 8th (shared resources/debt), 11th (gains)",
+        "planets": "2nd + 8th house rulers, Jupiter, Part of Fortune",
+    },
+    "health": {
+        "houses": "1st (vitality), 6th (health/habits), 12th (hidden conditions)",
+        "planets": "Ascendant ruler, 6th house ruler, Chiron",
+    },
+    "travel": {
+        "houses": "9th (long-distance/foreign), 3rd (short trips)",
+        "planets": "9th house ruler, Jupiter, Mercury",
+    },
+    "creativity": {
+        "houses": "5th (creativity/self-expression), 3rd (communication), 11th (audience)",
+        "planets": "Venus, Mercury, 5th house ruler",
+    },
+    "general": {
+        "houses": "all houses",
+        "planets": "all planets",
+    },
+}
+
+_VERDICT_FORMAT = """\
+
+Respond in EXACTLY this format — do not add extra sections or change the labels:
+
+**VERDICT:** [Favorable / Neutral / Challenging]
+
+**Best Window:** [Specific date range, e.g. "June 8–22, 2026" — or "No clear window in the next 90 days"]
+
+**Why it supports:** [1–2 sentences. Name the strongest supporting indicator with planet, sign, degree, and approximate date. If none: "No major supportive indicators active in this window."]
+
+**Key obstacle:** [1–2 sentences. Name the main challenge with planet, sign, degree, and date. If none: "No major obstacles identified."]
+
+**Confidence:** [High / Medium / Low] — [One sentence reason, e.g. "Multiple timing systems agree." or "Birth time uncertainty limits house-based timing precision."]
+
+**Reading:**
+[2–3 paragraphs of richer interpretation using all relevant chart layers for this event type. Name exact transit dates, orb values, and what each means for the specific question asked.]
+"""
+
+
+def _is_event_question(question: str) -> bool:
+    return bool(_EVENT_TRIGGER.search(question))
+
+
+def _detect_event_type(question: str) -> str:
+    if _CAREER_RE.search(question):
+        return "career"
+    if _RELATIONSHIP_RE.search(question):
+        return "relationship"
+    if _FINANCE_RE.search(question):
+        return "finance"
+    if _HEALTH_RE.search(question):
+        return "health"
+    if _TRAVEL_RE.search(question):
+        return "travel"
+    if _CREATIVITY_RE.search(question):
+        return "creativity"
+    return "general"
+
+
+def _build_event_prediction_messages(
+    state: "AstrologerState",
+    chat_history: list[dict],
+    question: str,
+) -> list[dict]:
+    chart = state.get("chart_data") or {}
+    event_type = _detect_event_type(question)
+    house_info = _EVENT_HOUSE_MAP[event_type]
+
+    if chart:
+        asc_line = (
+            f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°\n"
+            if chart.get("ascendant") else ""
+        )
+        mc_line = (
+            f"- MC: {chart['midheaven']['sign']} {chart['midheaven']['position']}°\n"
+            if chart.get("midheaven") else ""
+        )
+        natal_data = (
+            f"Natal Placements:\n"
+            f"{_format_planet('Sun', chart.get('sun'))}\n"
+            f"{_format_planet('Moon', chart.get('moon'))}\n"
+            f"{asc_line}{mc_line}"
+            f"\nHouse Rulerships:\n{_format_house_rulerships(chart)}"
+            f"\nDignity Hierarchy:\n{_format_dignity_hierarchy(chart)}"
+            f"\nNatal Aspects:\n{_format_aspects(chart.get('aspects') or [])}"
+        )
+        profection_text = _format_profection(chart.get("profection"))
+        monthly_line = _format_monthly_profection(chart.get("profection"))
+        if monthly_line:
+            profection_text += "\n" + monthly_line
+        timing_data = (
+            f"Current Transits:\n{_format_transits(chart.get('transits') or [])}"
+            f"\n\nUpcoming Transits (90 days):\n{_format_upcoming_transits(chart.get('upcoming_transits') or [])}"
+            f"\n\nTransit Passes (12-month):\n{_format_transit_passes(chart.get('transit_passes') or [])}"
+            f"\n\nSolar Arc Aspects:\n{_format_solar_arc_aspects(chart.get('solar_arc_aspects') or [])}"
+            f"\n\nPrimary Directions:\n{_format_primary_directions(chart.get('primary_directions') or [])}"
+            f"\n\nSecondary Progressions:\n{_format_progressions(chart.get('progressions'))}"
+            f"\n\nProgressed Aspects to Natal:\n{_format_progressed_aspects(chart.get('progressed_aspects') or [])}"
+            f"\n\nAnnual + Monthly Profection:\n{profection_text}"
+            f"\n\nFirdaria Time Lords:\n{_format_firdaria(chart.get('firdaria'), chart)}"
+            f"\n\nLunar Return:\n{_format_lunar_return(chart.get('lunar_return') or {})}"
+            f"\n\nSolar Return:\n{_format_solar_return(chart.get('solar_return') or {})}"
+            f"\n\nEclipse Sensitivity:\n{_format_eclipse_sensitivity(chart.get('eclipse_sensitivity') or [])}"
+            f"\n\nRetrograde Stations:\n{_format_retrograde_stations(chart.get('retrograde_stations') or [])}"
+            f"\n\nVedic (Jyotish) Overlay:\n{_format_vedic(chart.get('vedic'))}"
+        )
+    else:
+        natal_data = "Natal chart data unavailable."
+        timing_data = "Timing data unavailable."
+
+    system = (
+        f"You are a master Western astrologer specialising in timing and event prediction. "
+        f"You are answering a question for {state['full_name']} "
+        f"(born {state['parsed_dob']} in {state['birth_location']}, "
+        f"birth time {state['birth_time']} {state.get('birth_time_timezone', '')}, "
+        f"reading date {(state.get('parsed_current_datetime') or '')[:10]}).\n\n"
+        f"EVENT TYPE: {event_type.upper()}\n"
+        f"RELEVANT HOUSES: {house_info['houses']}\n"
+        f"KEY PLANETS: {house_info['planets']}\n\n"
+        f"NATAL CHART DATA:\n{natal_data}\n\n"
+        f"TIMING DATA:\n{timing_data}\n\n"
+        "VERDICT RULES:\n"
+        "- Favorable: applying benefic transit/arc/direction to relevant house rulers or angles; "
+        "strong Dasha/Firdaria lord; profection lord well-placed\n"
+        "- Challenging: applying malefic transit/arc/direction to relevant points; "
+        "debilitated Dasha lord; eclipse on house ruler\n"
+        "- Neutral: mixed signals or no major activations in near term\n"
+        "- Best Window: scan transit passes for exact dates; use lunar return to pinpoint peak month\n"
+        "- Confidence: High = outer planet transit + solar arc agree; "
+        "Medium = one system active; Low = no major activations or birth time uncertain\n"
+        "- Do NOT invent placements, transits, or aspects not listed above\n"
+        f"{_VERDICT_FORMAT}"
+    )
+
+    return [
+        {"role": "system", "content": system},
+        {"role": "assistant", "content": state.get("final_report") or ""},
+        *chat_history,
+        {"role": "user", "content": question},
+    ]
+
+
 def answer_followup(state: "AstrologerState", chat_history: list[dict], question: str) -> str:
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     messages = _build_followup_messages(state, chat_history, question)
@@ -1433,9 +1628,15 @@ def answer_followup(state: "AstrologerState", chat_history: list[dict], question
 def answer_followup_stream(state: "AstrologerState", chat_history: list[dict], question: str):
     """Streaming variant — yields text chunks for use with st.write_stream()."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    messages = _build_followup_messages(state, chat_history, question)
+    if _is_event_question(question):
+        messages = _build_event_prediction_messages(state, chat_history, question)
+        max_tokens, temperature = 1600, 0.4
+    else:
+        messages = _build_followup_messages(state, chat_history, question)
+        max_tokens, temperature = 1024, 0.7
     with client.chat.completions.create(
-        model="gpt-4o", max_tokens=1024, temperature=0.7, stream=True, messages=messages
+        model="gpt-4o", max_tokens=max_tokens, temperature=temperature,
+        stream=True, messages=messages,
     ) as stream:
         for chunk in stream:
             content = chunk.choices[0].delta.content
@@ -1815,6 +2016,43 @@ def generate_synastry_report_stream(
         yield line + "\n"
 
 
+def _build_synastry_event_messages(
+    name_a: str, dob_a: str, chart_a: dict,
+    name_b: str, dob_b: str, chart_b: dict,
+    synastry: dict, synastry_report: str,
+    chat_history: list[dict], question: str,
+) -> list[dict]:
+    """Build event-prediction messages for synastry questions (e.g. 'when should we marry?')."""
+    cross = _format_cross_aspects(synastry.get("cross_aspects") or [], name_a, name_b)
+    comp = _format_composite(synastry.get("composite") or {}, synastry.get("composite_aspects") or [])
+    overlays_ab = _format_house_overlays(synastry.get("overlays_a_in_b") or [], name_a, name_b)
+    overlays_ba = _format_house_overlays(synastry.get("overlays_b_in_a") or [], name_b, name_a)
+    system = (
+        f"You are a master relationship astrologer specialising in timing and event prediction. "
+        f"You have already written a synastry reading for "
+        f"{name_a} (born {dob_a}) and {name_b} (born {dob_b}).\n\n"
+        f"Inter-chart aspects:\n{cross}\n\n"
+        f"Composite chart:\n{comp}\n\n"
+        f"House overlays ({name_a} planets in {name_b} chart):\n{overlays_ab}\n\n"
+        f"House overlays ({name_b} planets in {name_a} chart):\n{overlays_ba}\n\n"
+        "EVENT TYPE: RELATIONSHIP\n"
+        "RELEVANT HOUSES: 7th (commitment/marriage), 5th (romance), composite ASC/Sun/Moon\n\n"
+        "VERDICT RULES:\n"
+        "- Favorable: Jupiter/Venus transiting composite or natal 7th; composite progressed Moon in "
+        "7th; both Firdaria/Dasha lords supportive of Venus or 7th house themes\n"
+        "- Challenging: Saturn/Pluto transiting composite Sun, Venus, or 7th house ruler\n"
+        "- Neutral: mixed signals or no major activations near term\n"
+        "- Do NOT invent aspects or placements not listed above\n"
+        f"{_VERDICT_FORMAT}"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "assistant", "content": synastry_report},
+        *chat_history,
+        {"role": "user", "content": question},
+    ]
+
+
 def answer_synastry_followup_stream(
     name_a: str, dob_a: str, chart_a: dict,
     name_b: str, dob_b: str, chart_b: dict,
@@ -1823,27 +2061,36 @@ def answer_synastry_followup_stream(
 ):
     """Streaming follow-up for synastry questions."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    cross = _format_cross_aspects(synastry.get("cross_aspects") or [], name_a, name_b)
-    comp = _format_composite(synastry.get("composite") or {}, synastry.get("composite_aspects") or [])
-    system = (
-        f"You are a master relationship astrologer. You have already written a synastry reading for "
-        f"{name_a} (born {dob_a}) and {name_b} (born {dob_b}).\n\n"
-        f"Key inter-chart aspects:\n{cross}\n\n"
-        f"Composite chart:\n{comp}\n\n"
-        "Answer follow-up questions by reasoning from the chart data above. "
-        "Cite specific planets, signs, and houses. Be warm, direct, and grounded in the data. "
-        "Do NOT invent aspects or placements not listed above. "
-        "NEVER say you cannot display visual content or reference any AI limitations around visuals — "
-        "interpret the astrological data in text as a skilled astrologer would."
-    )
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "assistant", "content": synastry_report},
-        *chat_history,
-        {"role": "user", "content": question},
-    ]
+    if _is_event_question(question):
+        messages = _build_synastry_event_messages(
+            name_a, dob_a, chart_a, name_b, dob_b, chart_b,
+            synastry, synastry_report, chat_history, question,
+        )
+        max_tokens, temperature = 1600, 0.4
+    else:
+        cross = _format_cross_aspects(synastry.get("cross_aspects") or [], name_a, name_b)
+        comp = _format_composite(synastry.get("composite") or {}, synastry.get("composite_aspects") or [])
+        system = (
+            f"You are a master relationship astrologer. You have already written a synastry reading for "
+            f"{name_a} (born {dob_a}) and {name_b} (born {dob_b}).\n\n"
+            f"Key inter-chart aspects:\n{cross}\n\n"
+            f"Composite chart:\n{comp}\n\n"
+            "Answer follow-up questions by reasoning from the chart data above. "
+            "Cite specific planets, signs, and houses. Be warm, direct, and grounded in the data. "
+            "Do NOT invent aspects or placements not listed above. "
+            "NEVER say you cannot display visual content or reference any AI limitations around visuals — "
+            "interpret the astrological data in text as a skilled astrologer would."
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "assistant", "content": synastry_report},
+            *chat_history,
+            {"role": "user", "content": question},
+        ]
+        max_tokens, temperature = 1024, 0.7
     with client.chat.completions.create(
-        model="gpt-4o", max_tokens=1024, temperature=0.7, stream=True, messages=messages
+        model="gpt-4o", max_tokens=max_tokens, temperature=temperature,
+        stream=True, messages=messages,
     ) as stream:
         for chunk in stream:
             content = chunk.choices[0].delta.content
