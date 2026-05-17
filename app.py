@@ -330,7 +330,7 @@ with st.sidebar:
         _focus_selections = st.multiselect(
             "Report Focus",
             options=_FOCUS_OPTIONS,
-            placeholder="Select one or more focus areas…",
+            placeholder="Select one or more focus areas...",
             key="f_report_focus",
         )
         report_focus = ", ".join(_focus_selections) if _focus_selections else None
