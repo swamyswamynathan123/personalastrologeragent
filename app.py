@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from agent.graph import graph, prepare_graph
 from agent.state import AstrologerState
-from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report, answer_synastry_followup_stream
+from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report_stream, answer_synastry_followup_stream
 from astro.compute import compute_chart, compute_synastry
 
 load_dotenv()
@@ -187,6 +187,8 @@ if "synastry_error" not in st.session_state:
     st.session_state.synastry_error = None
 if "_prepared_state" not in st.session_state:
     st.session_state._prepared_state = None
+if "_synastry_prepared" not in st.session_state:
+    st.session_state._synastry_prepared = None
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
@@ -534,6 +536,7 @@ with synastry_tab:
             st.session_state.synastry_result = None
             st.session_state.synastry_chat_history = []
             st.session_state.synastry_error = None
+            st.session_state._synastry_prepared = None
 
             b_errors = []
             if not b_name or not b_name.strip():
@@ -572,19 +575,8 @@ with synastry_tab:
                             tz_str=b_timezone,
                         )
                         synastry = compute_synastry(chart_a, chart_b)
-                        syn_report = generate_synastry_report(
-                            name_a=result_a["full_name"],
-                            dob_a=result_a["parsed_dob"],
-                            loc_a=result_a["birth_location"],
-                            chart_a=chart_a,
-                            name_b=b_name.strip(),
-                            dob_b=b_dob.strftime("%Y-%m-%d"),
-                            loc_b=b_location.strip(),
-                            chart_b=chart_b,
-                            synastry=synastry,
-                        )
 
-                    st.session_state.synastry_result = {
+                    st.session_state._synastry_prepared = {
                         "name_a": result_a["full_name"],
                         "dob_a": result_a["parsed_dob"],
                         "loc_a": result_a["birth_location"],
@@ -594,7 +586,6 @@ with synastry_tab:
                         "loc_b": b_location.strip(),
                         "chart_b": chart_b,
                         "synastry": synastry,
-                        "report": syn_report,
                     }
                 except Exception as exc:
                     st.session_state.synastry_error = str(exc)
@@ -602,7 +593,30 @@ with synastry_tab:
         if st.session_state.synastry_error:
             st.error(f"An error occurred: {st.session_state.synastry_error}")
 
-        if st.session_state.synastry_result:
+        elif st.session_state._synastry_prepared:
+            prep = st.session_state._synastry_prepared
+
+            st.divider()
+            s_col1, s_col2 = st.columns(2)
+            with s_col1:
+                st.metric("Person A", prep["name_a"])
+                st.caption(f"{prep['dob_a']} · {prep['loc_a']}")
+            with s_col2:
+                st.metric("Person B", prep["name_b"])
+                st.caption(f"{prep['dob_b']} · {prep['loc_b']}")
+            st.divider()
+
+            syn_report_text = st.write_stream(generate_synastry_report_stream(
+                name_a=prep["name_a"], dob_a=prep["dob_a"], loc_a=prep["loc_a"], chart_a=prep["chart_a"],
+                name_b=prep["name_b"], dob_b=prep["dob_b"], loc_b=prep["loc_b"], chart_b=prep["chart_b"],
+                synastry=prep["synastry"],
+            ))
+
+            st.session_state.synastry_result = {**prep, "report": syn_report_text}
+            st.session_state._synastry_prepared = None
+            st.rerun()
+
+        elif st.session_state.synastry_result:
             syn = st.session_state.synastry_result
 
             st.divider()

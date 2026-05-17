@@ -878,6 +878,14 @@ Read the composite chart: composite Sun + Moon sign/house as the relationship's 
 """
 
 
+_SYNASTRY_SYSTEM = (
+    "You are a master relationship astrologer who reads synastry with psychological depth and compassion. "
+    "You balance honesty about challenges with genuine recognition of gifts. You never catastrophize "
+    "difficult aspects, and you never oversell easy ones. Every statement is grounded in specific "
+    "chart data. You speak warmly and directly to the people, not about them."
+)
+
+
 def generate_synastry_report(
     name_a: str, dob_a: str, loc_a: str, chart_a: dict,
     name_b: str, dob_b: str, loc_b: str, chart_b: dict,
@@ -889,19 +897,34 @@ def generate_synastry_report(
         model="gpt-4o",
         max_tokens=3000,
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a master relationship astrologer who reads synastry with psychological depth and compassion. "
-                    "You balance honesty about challenges with genuine recognition of gifts. You never catastrophize "
-                    "difficult aspects, and you never oversell easy ones. Every statement is grounded in specific "
-                    "chart data. You speak warmly and directly to the people, not about them."
-                ),
-            },
+            {"role": "system", "content": _SYNASTRY_SYSTEM},
             {"role": "user", "content": prompt},
         ],
     )
     return response.choices[0].message.content
+
+
+def generate_synastry_report_stream(
+    name_a: str, dob_a: str, loc_a: str, chart_a: dict,
+    name_b: str, dob_b: str, loc_b: str, chart_b: dict,
+    synastry: dict,
+):
+    """Streaming variant — yields text chunks for use with st.write_stream()."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    prompt = build_synastry_prompt(name_a, dob_a, loc_a, chart_a, name_b, dob_b, loc_b, chart_b, synastry)
+    with client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=3000,
+        stream=True,
+        messages=[
+            {"role": "system", "content": _SYNASTRY_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+    ) as stream:
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield content
 
 
 def answer_synastry_followup_stream(
