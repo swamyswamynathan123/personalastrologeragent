@@ -241,6 +241,16 @@ hr { border-color: #2e2e4e; }
     border-radius: 8px !important;
     background: #1e1e38 !important;
 }
+[data-testid="stExpander"] p,
+[data-testid="stExpander"] span,
+[data-testid="stExpander"] div,
+[data-testid="stExpander"] small,
+[data-testid="stExpander"] label {
+    color: #c8c0b0 !important;
+}
+[data-testid="stExpander"] strong {
+    color: #d4bfff !important;
+}
 
 /* ── Placeholder panel ───────────────────────────────────────────── */
 .placeholder-panel {
@@ -395,14 +405,13 @@ with st.sidebar:
     with st.expander("📚 My Saved Charts", expanded=False):
         _saved = list_charts()
         if not _saved:
-            st.caption("No saved charts yet. Generate a reading and click **Save Reading**.")
+            st.markdown("No saved charts yet. Generate a reading and click **Save Reading**.")
         else:
             for _c in _saved:
                 _icon = "⭐" if _c["chart_type"] == "natal" else "💞"
                 _date = _c["created_at"][:10]
-                _col1, _col2, _col3 = st.columns([4, 1, 1])
-                with _col1:
-                    st.caption(f"{_icon} **{_c['name']}** · {_date}")
+                st.markdown(f"{_icon} **{_c['name']}** · {_date}")
+                _col2, _col3 = st.columns([3, 1])
                 with _col2:
                     if st.button("Load", key=f"load_{_c['id']}", use_container_width=True):
                         _loaded = load_chart(_c["id"])
@@ -413,6 +422,30 @@ with st.sidebar:
                                 st.session_state.validation_message = None
                                 st.session_state._prepared_state = None
                                 st.session_state._transit_calendar = None
+                                # Repopulate sidebar form fields
+                                from datetime import date as _d, time as _t
+                                try:
+                                    _yy, _mm, _dd = map(int, (_loaded.get("parsed_dob") or "1990-01-01").split("-"))
+                                    st.session_state["f_dob"] = _d(_yy, _mm, _dd)
+                                except Exception:
+                                    pass
+                                try:
+                                    _hh, _min = map(int, (_loaded.get("birth_time") or "12:00").split(":"))
+                                    st.session_state["f_birth_time"] = _t(_hh, _min)
+                                except Exception:
+                                    pass
+                                st.session_state["f_full_name"] = _loaded.get("full_name") or ""
+                                st.session_state["f_birth_location"] = _loaded.get("birth_location") or ""
+                                st.session_state["f_birth_time_timezone"] = _loaded.get("birth_time_timezone") or "UTC"
+                                st.session_state["f_birth_time_confidence"] = _loaded.get("birth_time_confidence") or "exact"
+                                st.session_state["f_house_system"] = _loaded.get("house_system") or "Placidus"
+                                st.session_state["f_current_location"] = _loaded.get("current_location") or ""
+                                st.session_state["f_additional_info"] = _loaded.get("additional_info") or ""
+                                _focus_str = _loaded.get("report_focus") or ""
+                                st.session_state["f_report_focus"] = [
+                                    f.strip() for f in _focus_str.split(",")
+                                    if f.strip() in _FOCUS_OPTIONS
+                                ] if _focus_str else []
                             else:
                                 st.session_state.synastry_result = _loaded
                             st.rerun()
