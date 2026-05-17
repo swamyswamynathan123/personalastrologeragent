@@ -285,64 +285,55 @@ _FOCUS_OPTIONS = [
 with st.sidebar:
     st.markdown("## ⭐ Your Details")
 
-    with st.form("astro_form"):
-        st.markdown("#### Birth Information")
-        full_name = st.text_input("Full Name *", placeholder="e.g., Jane Doe", key="f_full_name")
-        dob = st.date_input(
-            "Date of Birth *",
-            value=None,
-            min_value=date(1900, 1, 1),
-            max_value=date.today(),
-            key="f_dob",
-        )
-        birth_time = st.time_input("Birth Time *", value=None, step=60, key="f_birth_time")
-        birth_time_confidence = st.selectbox(
-            "Birth Time Confidence",
-            options=["exact", "approximate", "unknown"],
-            index=0,
-            key="f_birth_time_confidence",
-            help="How certain are you of the birth time? Approximate/unknown softens house-based interpretations.",
-        )
-        birth_location = st.text_input(
-            "Birth Location *",
-            placeholder="City, Region, Country",
-            key="f_birth_location",
-        )
-        birth_time_timezone = st.selectbox(
-            "Birth Timezone *",
-            options=ALL_TIMEZONES,
-            index=DEFAULT_TZ_INDEX,
-            key="f_birth_time_timezone",
-        )
-        house_system = st.selectbox(
-            "House System",
-            options=["Placidus", "Whole Sign", "Koch"],
-            index=0,
-            key="f_house_system",
-            help="Placidus is standard Western. Whole Sign is used in Hellenistic & Vedic traditions. Koch is popular in German-speaking countries.",
-        )
-        current_location = st.text_input(
-            "Current Location *",
-            placeholder="City, Region, Country",
-            key="f_current_location",
-        )
+    st.markdown("#### Birth Information")
+    full_name = st.text_input("Full Name *", placeholder="e.g., Jane Doe", key="f_full_name")
+    dob = st.date_input(
+        "Date of Birth *",
+        value=None,
+        min_value=date(1900, 1, 1),
+        max_value=date.today(),
+        key="f_dob",
+    )
+    birth_time = st.time_input("Birth Time *", value=None, step=60, key="f_birth_time")
+    birth_time_confidence = st.selectbox(
+        "Birth Time Confidence",
+        options=["exact", "approximate", "unknown"],
+        index=0,
+        key="f_birth_time_confidence",
+        help="How certain are you of the birth time? Approximate/unknown softens house-based interpretations.",
+    )
+    birth_location = st.text_input(
+        "Birth Location *",
+        placeholder="City, Region, Country",
+        key="f_birth_location",
+    )
+    birth_time_timezone = st.selectbox(
+        "Birth Timezone *",
+        options=ALL_TIMEZONES,
+        index=DEFAULT_TZ_INDEX,
+        key="f_birth_time_timezone",
+    )
+    house_system = st.selectbox(
+        "House System",
+        options=["Placidus", "Whole Sign", "Koch"],
+        index=0,
+        key="f_house_system",
+        help="Placidus is standard Western. Whole Sign is used in Hellenistic & Vedic traditions. Koch is popular in German-speaking countries.",
+    )
+    current_location = st.text_input(
+        "Current Location *",
+        placeholder="City, Region, Country",
+        key="f_current_location",
+    )
 
-        st.markdown("#### Optional")
-        additional_info = st.text_area(
-            "Additional Context",
-            placeholder="Life events or questions to address…",
-            height=100,
-            key="f_additional_info",
-        )
+    st.markdown("#### Optional")
+    additional_info = st.text_area(
+        "Additional Context",
+        placeholder="Life events or questions to address…",
+        height=100,
+        key="f_additional_info",
+    )
 
-        submitted = st.form_submit_button(
-            "Generate My Reading ⭐",
-            type="primary",
-            use_container_width=True,
-        )
-
-    # st.pills must live outside the form — inside a form it can block the
-    # submit button from firing on the second click in some Streamlit versions.
     st.markdown("#### Report Focus")
     _focus_selections = st.pills(
         "Report Focus",
@@ -352,6 +343,15 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     report_focus = ", ".join(_focus_selections) if _focus_selections else None
+    if report_focus:
+        st.caption(f"Selected: {report_focus}")
+
+    submitted = st.button(
+        "Generate My Reading ⭐",
+        type="primary",
+        use_container_width=True,
+        key="submit_btn",
+    )
 
 # --- Form submission: validate + compute chart, then stream report in the tab ---
 if submitted:
@@ -455,6 +455,8 @@ with natal_tab:
             st.metric("Current Location", prepared["current_location"])
 
         st.caption(f"Reading generated as of {prepared['parsed_current_datetime']}")
+        if prepared.get("report_focus"):
+            st.caption(f"Focus: {prepared['report_focus']}")
         st.divider()
 
         # Chart SVGs
@@ -516,6 +518,8 @@ with natal_tab:
             st.metric("Current Location", result["current_location"])
 
         st.caption(f"Reading generated as of {result['parsed_current_datetime']}")
+        if result.get("report_focus"):
+            st.caption(f"Focus: {result['report_focus']}")
         st.divider()
 
         # Chart wheels (natal + transit overlay)
