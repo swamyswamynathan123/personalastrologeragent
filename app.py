@@ -94,6 +94,21 @@ html, body, [class*="css"] {
     opacity: 0.88;
 }
 
+/* ── Secondary / default buttons ─────────────────────────────────── */
+.stButton > button[kind="secondary"] {
+    background: #1e1e38 !important;
+    border: 1px solid #3a3a60 !important;
+    color: #d4bfff !important;
+    font-family: "Georgia", serif;
+    border-radius: 8px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+.stButton > button[kind="secondary"]:hover {
+    background: #2a2a50 !important;
+    border-color: #8866cc !important;
+    color: #e8d8ff !important;
+}
+
 /* ── Page header ─────────────────────────────────────────────────── */
 .page-header {
     padding: 2rem 0 1.2rem;
