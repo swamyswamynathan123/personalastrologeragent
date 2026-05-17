@@ -1200,6 +1200,20 @@ Using the chart data above (Firdaria periods, profection years, and transit date
             + "\n"
         )
 
+    if focus and focus != "general life reading":
+        focus_section = f"""
+
+**8. Deep Dive: {focus}**
+This section is dedicated exclusively to the focus areas requested: **{focus}**. For each focus area:
+- Identify the relevant natal houses and their current rulers
+- Name the most active transit, solar arc, or progressed aspect touching those houses right now
+- Give specific, concrete guidance tailored to this exact focus area
+- State the single most important planetary indicator for this topic at this moment
+Do not repeat content from earlier sections — this is a deeper, focused lens on the requested life areas.
+"""
+    else:
+        focus_section = ""
+
     return f"""You are a master Western astrologer writing a personalized reading for {state['full_name']}.
 
 Only use the chart data provided — do NOT invent placements, transits, or aspects not listed.
@@ -1306,7 +1320,7 @@ Each theme must be supported by at least 2 independent chart factors. Draw from 
 
 **7. Favorable Timing**
 Name 2–3 specific windows with approximate timing. For each: what it is good for and why (cite the activating aspect). If the progressed Moon changes signs within 6 months, name the transition as a fresh emotional chapter and what it opens up.
-{rectification_section}"""
+{focus_section}{rectification_section}"""
 
 
 def _build_followup_messages(
