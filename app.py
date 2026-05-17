@@ -3,7 +3,6 @@ from datetime import datetime, date
 
 import pytz
 import streamlit as st
-import streamlit.components.v1 as st_components
 from dotenv import load_dotenv
 
 from agent.graph import graph, prepare_graph
@@ -453,15 +452,15 @@ with natal_tab:
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(_svg_iframe(chart_svg), height=620, scrolling=False)
+                    st.html(_svg_iframe(chart_svg))
                 tab_idx += 1
             if vedic_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(_svg_iframe(vedic_svg), height=620, scrolling=False)
+                    st.html(_svg_iframe(vedic_svg))
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(_svg_iframe(transit_svg), height=620, scrolling=False)
+                    st.html(_svg_iframe(transit_svg))
             st.divider()
 
         if st.session_state._stream_error:
@@ -513,7 +512,7 @@ with natal_tab:
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(_svg_iframe(chart_svg), height=620, scrolling=False)
+                    st.html(_svg_iframe(chart_svg))
                     st.download_button(
                         "Download Natal SVG", data=chart_svg,
                         file_name=f"natal_{result['full_name'].replace(' ', '_')}.svg",
@@ -522,7 +521,7 @@ with natal_tab:
                 tab_idx += 1
             if vedic_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(_svg_iframe(vedic_svg), height=620, scrolling=False)
+                    st.html(_svg_iframe(vedic_svg))
                     st.download_button(
                         "Download Vedic SVG", data=vedic_svg,
                         file_name=f"vedic_{result['full_name'].replace(' ', '_')}.svg",
@@ -531,7 +530,7 @@ with natal_tab:
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(_svg_iframe(transit_svg), height=620, scrolling=False)
+                    st.html(_svg_iframe(transit_svg))
                     st.download_button(
                         "Download Transit SVG", data=transit_svg,
                         file_name=f"transit_{result['full_name'].replace(' ', '_')}.svg",

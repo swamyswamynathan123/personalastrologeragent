@@ -1,6 +1,10 @@
 from __future__ import annotations
+import logging
 from typing import Optional
 from kerykeion import AstrologicalSubject
+
+# kerykeion logs ERROR when GeoNames rate-limits; we fall back to Nominatim so these are harmless
+logging.getLogger("kerykeion.fetch_geonames").setLevel(logging.CRITICAL)
 
 _PLANETS = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto"]
 
