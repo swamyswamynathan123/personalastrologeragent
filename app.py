@@ -148,6 +148,19 @@ html, body, [class*="css"] {
     border: 1px solid #2e2e4e;
     border-radius: 10px;
     margin-bottom: 0.5rem;
+    color: #e8e0d0 !important;
+}
+[data-testid="stChatMessage"] p,
+[data-testid="stChatMessage"] li,
+[data-testid="stChatMessage"] span,
+[data-testid="stChatMessage"] div {
+    color: #e8e0d0 !important;
+}
+[data-testid="stChatMessage"] strong {
+    color: #d4bfff !important;
+}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
+    color: #e8e0d0 !important;
 }
 .stChatInputContainer textarea {
     background: #1e1e38 !important;
