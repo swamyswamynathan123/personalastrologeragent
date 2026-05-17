@@ -469,6 +469,51 @@ def _format_progressed_lunation(prog: dict) -> str:
     )
 
 
+def _format_retrograde_stations(stations: list[dict]) -> str:
+    if not stations:
+        return "No outer planet stations within 3° of a natal point in the ±180-day window."
+    lines = []
+    for s in stations:
+        planet = s["planet"].capitalize()
+        stype = s.get("station_type", "station")
+        date = s.get("date", "unknown")
+        sign = s.get("sign", "?")
+        pos = s.get("position", "?")
+        days = s.get("days_from_now", 0)
+        past = s.get("past", False)
+        try:
+            timing = f"{abs(int(days))} days ago" if past else f"in {int(days)} days"
+        except (TypeError, ValueError):
+            timing = "timing unknown"
+        contacts = s.get("natal_contacts") or []
+        if contacts:
+            contact_strs = [
+                f"within {c['orb']}° of natal {c['natal_planet'].replace('_', ' ').title()}"
+                for c in contacts
+            ]
+            lines.append(
+                f"- {planet} stations {stype} at {sign} {pos}° on {date} ({timing}) — {'; '.join(contact_strs)}"
+            )
+        else:
+            lines.append(f"- {planet} stations {stype} at {sign} {pos}° on {date} ({timing})")
+    return "\n".join(lines)
+
+
+def _format_transit_to_progressed(aspects: list[dict]) -> str:
+    if not aspects:
+        return "No outer-planet transits to progressed positions within 3° orb."
+    lines = []
+    for a in aspects:
+        tp = a["transiting_planet"].capitalize()
+        pp = a["progressed_planet"].replace("_", " ").title()
+        retro = " (Rx)" if a.get("retrograde") else ""
+        direction = "applying" if a.get("applying") else "separating"
+        lines.append(
+            f"- Transiting {tp}{retro} {a['aspect']} progressed {pp} (orb {a['orb']}°, {direction})"
+        )
+    return "\n".join(lines)
+
+
 def _compute_convergences(chart: dict, state: "AstrologerState") -> list[str]:
     """Detect the same planet activated across multiple timing systems."""
     convergences = []
@@ -579,6 +624,81 @@ def _compute_convergences(chart: dict, state: "AstrologerState") -> list[str]:
                 f"immediate psychological development."
             )
 
+    # House-level convergence: multiple independent techniques targeting the same house
+    house_activations: dict[int, list[str]] = {}
+
+    prof_house = profection.get("profected_house")
+    if prof_house:
+        try:
+            house_activations.setdefault(int(prof_house), []).append("annual profection")
+        except (TypeError, ValueError):
+            pass
+
+    prof_lord_house = profection.get("lord_house")
+    if prof_lord_house and prof_lord:
+        try:
+            house_activations.setdefault(int(prof_lord_house), []).append(
+                f"{prof_lord.capitalize()} (year lord) resides here"
+            )
+        except (TypeError, ValueError):
+            pass
+
+    if fird_major:
+        fird_data = chart.get(fird_major) or {}
+        fird_house = fird_data.get("house")
+        if fird_house:
+            try:
+                house_activations.setdefault(int(fird_house), []).append(
+                    f"{fird_major.capitalize()} (Firdaria lord) resides here"
+                )
+            except (TypeError, ValueError):
+                pass
+
+    solar_return = chart.get("solar_return") or {}
+    sr_house_map: dict[str, list[str]] = {}
+    for planet in _SR_PLANETS:
+        p = solar_return.get(planet)
+        if p and p.get("house"):
+            sr_house_map.setdefault(str(p["house"]), []).append(planet)
+    for house_str, sr_planets in sr_house_map.items():
+        if len(sr_planets) >= 2:
+            try:
+                label = ", ".join(p.capitalize() for p in sr_planets)
+                house_activations.setdefault(int(house_str), []).append(
+                    f"solar return stellium ({label})"
+                )
+            except (TypeError, ValueError):
+                pass
+
+    for t in transits:
+        np_key = (t.get("natal_planet") or "").lower()
+        tp_key = (t.get("transiting_planet") or "").lower()
+        if tp_key in outer_planets and np_key:
+            np_data = chart.get(np_key) or {}
+            np_house = np_data.get("house")
+            if np_house:
+                try:
+                    house_activations.setdefault(int(np_house), []).append(
+                        f"transiting {tp_key.capitalize()} hits natal {np_key.capitalize()} here"
+                    )
+                except (TypeError, ValueError):
+                    pass
+
+    for house_num, activators in house_activations.items():
+        unique = list(dict.fromkeys(activators))
+        theme = _HOUSE_THEMES.get(house_num, f"House {house_num}")
+        if len(unique) >= 3:
+            convergences.append(
+                f"HOUSE CONVERGENCE — House {house_num} ({theme}) is activated by {len(unique)} "
+                f"independent techniques simultaneously: {'; '.join(unique)}. "
+                f"This house's life themes are the single defining arena right now."
+            )
+        elif len(unique) == 2:
+            convergences.append(
+                f"HOUSE EMPHASIS — House {house_num} ({theme}) is highlighted by 2 independent "
+                f"timing layers: {' + '.join(unique)}. This life area merits focused attention."
+            )
+
     return convergences
 
 
@@ -684,10 +804,12 @@ def build_prompt(state: "AstrologerState") -> str:
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
         patterns_section = "## Aspect Patterns\n" + _format_aspect_patterns(chart.get("aspect_patterns") or [])
         eclipse_section = "## Eclipse Sensitivity (±6 months, 3° orb)\n" + _format_eclipse_sensitivity(chart.get("eclipse_sensitivity") or [])
+        retrograde_stations_section = "## Retrograde Stations (±180 days, 3° orb of natal)\n" + _format_retrograde_stations(chart.get("retrograde_stations") or [])
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
         upcoming_section = "## Upcoming Transits (next 90 days — outer planets only)\n" + _format_upcoming_transits(chart.get("upcoming_transits") or [])
         progressions_section = "## Secondary Progressions\n" + _format_progressions(chart.get("progressions"))
         prog_aspects_section = "## Progressed Aspects to Natal Chart\n" + _format_progressed_aspects(chart.get("progressed_aspects") or [])
+        transit_to_progressed_section = "## Outer Planet Transits to Progressed Positions\n" + _format_transit_to_progressed(chart.get("transit_to_progressed") or [])
         solar_arcs_section = "## Solar Arc Directions\n" + _format_solar_arcs(chart.get("solar_arcs") or {})
         solar_arc_aspects_section = "## Solar Arc Aspects to Natal Chart\n" + _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
         profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
@@ -699,8 +821,9 @@ def build_prompt(state: "AstrologerState") -> str:
             lunar_phase_section, pof_section, asteroids_section, arabic_section, antiscia_section,
             stelliums_section, receptions_section,
             nodes_section, houses_section,
-            aspects_section, patterns_section, eclipse_section, transits_section, upcoming_section,
-            progressions_section, prog_aspects_section,
+            aspects_section, patterns_section, eclipse_section, retrograde_stations_section,
+            transits_section, upcoming_section,
+            progressions_section, prog_aspects_section, transit_to_progressed_section,
             solar_arcs_section, solar_arc_aspects_section,
             profection_section, firdaria_section, solar_return_section, vedic_section,
         ])
@@ -777,6 +900,8 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Vimshottari Dasha: the Mahadasha (major period, 6–20 years) sets the biographical backdrop; the Antardasha (sub-period, months to years) is the current texture within it. If the Mahadasha lord is the same as the Firdaria major lord, this is a profound convergence across both traditions — name it explicitly as the chart's single most dominant current theme. If the Dasha lord is also the profection lord of the year, all three timing systems point to the same planet — this is exceptional and must be flagged.
 - Vedic Yogas: Pancha Mahapurusha yogas (Ruchaka/Bhadra/Hamsa/Malavya/Shasha) are among the most powerful signatures in Jyotish — a planet in its own sign or exaltation in an angular house (Kendra) creates exceptional talent in that planet's domain; integrate this with the Western chart's dominant planets and aspect patterns. Gajakesari Yoga (Jupiter in Kendra from Moon) is one of the most auspicious and common yogas — name it as a source of resilience and wisdom. Raj Yogas (Kendra-Trikona lord links) indicate potential for authority and worldly success; Parivartana Raj Yoga (sign exchange) is particularly potent. Neecha Bhanga Raj Yoga (cancelled debilitation) is a life-transforming signature — the early struggle described by the debilitation becomes the very source of exceptional strength. Dhana Yogas indicate financial capacity. Multiple yogas in the same chart compound each other. Name any yogas in Section 1 (Overview) if they involve the Sun, Moon, or Ascendant lord, or in Section 5 (Key Themes) if they involve other planets.
 - Eclipse sensitivity: when a natal planet or angle is within 3° of a recent or upcoming eclipse, that planet/angle is eclipsed — its themes are both activated and destabilized for 6–12 months around the eclipse. A solar eclipse conjunct a natal planet = a reset and new chapter in that planet's domain; a lunar eclipse = an emotional culmination or release. Eclipse contacts to the ASC, MC, Sun, or Moon are life-level events. If multiple natal points are eclipsed simultaneously, the chart is in a period of accelerated change.
+- Retrograde stations: a planet stationing (changing direction) within 3° of a natal point is not a brief transit — it will hold contact for weeks or months, making its activation far more potent than a standard transit pass. A direct station = the planet's themes are culminating and externalizing; a retrograde station = the themes are being internalized, reviewed, or reconsidered. An outer planet (especially Saturn or Pluto) stationing on a natal angle (ASC/MC) or luminary is a major biographical turning point. Name any station within 30 days (past or future) in Section 4.
+- Transit-to-progressed: outer planets transiting progressed planetary positions represent a distinct third timing layer. The progressed chart reflects the evolved psychological self, so transits to progressed positions activate themes of the person's current chapter, not just their natal baseline. The progressed Moon is especially sensitive: outer planet aspects to the progressed Moon correlate with emotional turning points that complement but differ from the natal Moon transits. If an outer planet hits the same point in both the natal and progressed chart, the activation is doubled — name this explicitly.
 - Progressed lunation cycle: the angle of the Progressed Moon ahead of the Progressed Sun reveals the psychological phase the person is living in. New Moon phase = a beginning, planting seeds with little visibility; Crescent = effort and resistance; First Quarter = crisis of action; Gibbous = refinement and preparation; Full Moon = culmination, revelation, visibility; Disseminating = sharing and teaching; Last Quarter = crisis of consciousness, questioning structures; Balsamic = release, completion, preparing for a new cycle. The "years to next Progressed New Moon" is a countdown to the next major psychological reset — if under 3 years, the current cycle is ending and new seeds are forming.
 - Fixed stars: only exact conjunctions (1° orb) matter — no other aspects. The 4 Royal Stars (Aldebaran, Regulus, Antares, Fomalhaut) conjunct a luminary or angle are life-defining signatures; Algol conjunct any personal planet or the Ascendant is the chart's most intense pressure point and must be named. Spica, Sirius, Vega near the Sun/Moon/Ascendant indicate distinctive gifts. Weave fixed stars into interpretation naturally — do not list them mechanically.
 

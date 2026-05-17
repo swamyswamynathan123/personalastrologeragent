@@ -543,19 +543,201 @@ def compute_eclipse_sensitivity(
 
         hits: list[dict] = []
         for eclipse in eclipses:
+            yr, mo, dy, _ = swe.revjul(eclipse["jd"])
+            eclipse_date_str = f"{int(yr)}-{int(mo):02d}-{int(dy):02d}"
             for body, body_pos in bodies.items():
                 diff = abs((body_pos - eclipse["abs_pos"] + 180) % 360 - 180)
                 if diff <= 3.0:
+                    body_data = chart.get(body) or {}
                     hits.append({
                         "body": body,
+                        "body_sign": body_data.get("sign", "?"),
+                        "body_pos": body_data.get("position", "?"),
                         "eclipse_type": eclipse["type"],
                         "eclipse_sign": eclipse["sign"],
-                        "eclipse_position": eclipse["position"],
+                        "eclipse_pos": round(eclipse["position"], 2),
+                        "eclipse_date": eclipse_date_str,
                         "orb": round(diff, 2),
                         "timing": eclipse["timing"],
                     })
 
         return sorted(hits, key=lambda x: x["orb"])
+    except Exception:
+        return []
+
+
+def compute_retrograde_stations(
+    chart: dict,
+    current_year: int, current_month: int, current_day: int,
+    current_hour: int = 12, current_minute: int = 0,
+    window_days: int = 180,
+    natal_orb: float = 3.0,
+) -> list[dict]:
+    """Find outer planet retrograde/direct stations within ±window_days of current date.
+
+    Each station includes natal_contacts: natal planets within natal_orb of the station degree.
+    Station degree is often more sensitive than the transit itself — a planet stationing
+    at a natal point can hold that contact for weeks.
+    """
+    try:
+        import os
+        import swisseph as swe
+        import kerykeion as _kery
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+
+        current_jd = swe.julday(current_year, current_month, current_day,
+                                 current_hour + current_minute / 60.0)
+
+        outer_body_ids = {
+            "mars": swe.MARS,
+            "jupiter": swe.JUPITER,
+            "saturn": swe.SATURN,
+            "uranus": swe.URANUS,
+            "neptune": swe.NEPTUNE,
+            "pluto": swe.PLUTO,
+        }
+
+        # Build natal abs_pos lookup
+        natal_bodies: dict[str, float] = {}
+        for planet in _PLANETS:
+            d = chart.get(planet)
+            if d and d.get("abs_pos") is not None:
+                natal_bodies[planet] = float(d["abs_pos"])
+        for key in ("ascendant", "midheaven", "north_node"):
+            d = chart.get(key)
+            if d and d.get("abs_pos") is not None:
+                natal_bodies[key] = float(d["abs_pos"])
+
+        stations: list[dict] = []
+
+        for planet_name, body_id in outer_body_ids.items():
+            start_jd = current_jd - window_days
+            end_jd = current_jd + window_days
+            try:
+                prev_speed = swe.calc_ut(start_jd, body_id)[0][3]
+                prev_jd = start_jd
+            except Exception:
+                continue
+
+            jd = start_jd + 1.0
+            while jd <= end_jd:
+                try:
+                    speed = swe.calc_ut(jd, body_id)[0][3]
+                except Exception:
+                    jd += 1.0
+                    continue
+
+                if prev_speed * speed < 0:
+                    # Speed changed sign — binary search for exact station JD
+                    lo, hi = prev_jd, jd
+                    for _ in range(30):
+                        mid = (lo + hi) / 2
+                        try:
+                            mid_speed = swe.calc_ut(mid, body_id)[0][3]
+                        except Exception:
+                            break
+                        if mid_speed * speed < 0:
+                            lo = mid
+                        else:
+                            hi = mid
+
+                    station_jd = (lo + hi) / 2
+                    try:
+                        station_lon = swe.calc_ut(station_jd, body_id)[0][0]
+                    except Exception:
+                        prev_speed, prev_jd = speed, jd
+                        jd += 1.0
+                        continue
+
+                    yr, mo, dy, _ = swe.revjul(station_jd)
+                    station_date = f"{int(yr)}-{int(mo):02d}-{int(dy):02d}"
+                    sign, pos = _sign_from_abs_pos(station_lon)
+                    station_type = "Direct" if prev_speed < 0 else "Retrograde"
+
+                    natal_contacts = []
+                    for body_name, body_abs in natal_bodies.items():
+                        diff = abs((station_lon - body_abs + 180) % 360 - 180)
+                        if diff <= natal_orb:
+                            natal_contacts.append({"body": body_name, "orb": round(diff, 2)})
+                    natal_contacts.sort(key=lambda x: x["orb"])
+
+                    stations.append({
+                        "planet": planet_name,
+                        "station_type": station_type,
+                        "date": station_date,
+                        "sign": sign,
+                        "position": round(pos, 2),
+                        "abs_pos": round(station_lon, 2),
+                        "natal_contacts": natal_contacts,
+                        "days_from_now": round(station_jd - current_jd),
+                        "past": station_jd < current_jd,
+                    })
+
+                prev_speed, prev_jd = speed, jd
+                jd += 1.0
+
+        return sorted(stations, key=lambda x: x["date"])
+    except Exception:
+        return []
+
+
+def compute_transit_to_progressed(
+    natal_chart: dict,
+    progressions: dict,
+    year: int, month: int, day: int, hour: int, minute: int,
+    city: str, nation: str, tz_str: str,
+    orb: float = 3.0,
+) -> list[dict]:
+    """Compute outer planet transits aspecting progressed planet positions.
+
+    Distinct from natal transits — these hit the evolved, time-adjusted positions.
+    A transit to the progressed Moon (fast-moving) is especially time-sensitive.
+    """
+    try:
+        outer_transit_bodies = ["mars", "jupiter", "saturn", "uranus", "neptune", "pluto"]
+        progressed_targets = ["sun", "moon", "mercury", "venus", "mars", "ascendant", "midheaven"]
+
+        transit_subject = AstrologicalSubject(
+            name="Transit", year=year, month=month, day=day, hour=hour, minute=minute,
+            city=city, nation=nation, tz_str=tz_str, online=True,
+        )
+
+        transit_positions: dict[str, dict] = {}
+        for body in outer_transit_bodies:
+            planet = getattr(transit_subject, body, None)
+            if planet is not None and hasattr(planet, "abs_pos"):
+                transit_positions[body] = {
+                    "abs_pos": float(planet.abs_pos),
+                    "retrograde": getattr(planet, "retrograde", False),
+                }
+
+        prog_positions: dict[str, float] = {}
+        if progressions:
+            for body in progressed_targets:
+                prog_body = progressions.get(body)
+                if prog_body and prog_body.get("abs_pos") is not None:
+                    prog_positions[body] = float(prog_body["abs_pos"])
+
+        aspects = []
+        for transit_name, transit_data in transit_positions.items():
+            t_pos = transit_data["abs_pos"]
+            t_retro = transit_data["retrograde"]
+            for prog_name, p_pos in prog_positions.items():
+                result = _find_aspect(t_pos, p_pos, max_orb=orb)
+                if result:
+                    aspect_name, actual_orb = result
+                    exact_angle = next(a for n, a, _ in _MAJOR_ASPECTS if n == aspect_name)
+                    applying = _is_applying(transit_name, t_pos, t_retro, prog_name, p_pos, False, exact_angle)
+                    aspects.append({
+                        "transiting_planet": transit_name,
+                        "progressed_planet": prog_name,
+                        "aspect": aspect_name,
+                        "orb": actual_orb,
+                        "applying": applying,
+                        "retrograde": t_retro,
+                    })
+
+        return sorted(aspects, key=lambda x: x["orb"])
     except Exception:
         return []
 

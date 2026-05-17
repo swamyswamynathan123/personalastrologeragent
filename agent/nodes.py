@@ -119,6 +119,8 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_vedic,
             compute_upcoming_transits,
             compute_eclipse_sensitivity,
+            compute_retrograde_stations,
+            compute_transit_to_progressed,
             generate_chart_svg, generate_transit_svg,
         )
 
@@ -271,6 +273,37 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["eclipse_sensitivity"] = []
+
+        try:
+            current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+            chart["retrograde_stations"] = compute_retrograde_stations(
+                chart=chart,
+                current_year=current_dt.year,
+                current_month=current_dt.month,
+                current_day=current_dt.day,
+                current_hour=current_dt.hour,
+                current_minute=current_dt.minute,
+            )
+        except Exception:
+            chart["retrograde_stations"] = []
+
+        try:
+            if chart.get("progressions"):
+                current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+                current_parts = [p.strip() for p in state["current_location"].split(",")]
+                chart["transit_to_progressed"] = compute_transit_to_progressed(
+                    natal_chart=chart,
+                    progressions=chart["progressions"],
+                    year=current_dt.year, month=current_dt.month, day=current_dt.day,
+                    hour=current_dt.hour, minute=current_dt.minute,
+                    city=current_parts[0],
+                    nation=current_parts[-1] if len(current_parts) > 1 else "",
+                    tz_str="UTC",
+                )
+            else:
+                chart["transit_to_progressed"] = []
+        except Exception:
+            chart["transit_to_progressed"] = []
 
         try:
             chart["chart_svg"] = generate_chart_svg(
