@@ -2246,25 +2246,47 @@ def generate_transit_svg(
     transit_hour: int, transit_minute: int,
     transit_city: str, transit_nation: str,
     house_system: str = "Placidus",
+    natal_lat: float | None = None,
+    natal_lng: float | None = None,
+    transit_lat: float | None = None,
+    transit_lng: float | None = None,
 ) -> str:
     """Render a transit chart overlay SVG (natal wheel + current sky) via kerykeion."""
     try:
         from kerykeion import KerykeionChartSVG
         hs_code = _HOUSE_SYSTEM_CODES.get(house_system, "P")
-        natal = AstrologicalSubject(
-            name=full_name,
-            year=birth_year, month=birth_month, day=birth_day,
-            hour=birth_hour, minute=birth_minute,
-            city=city, nation=nation, tz_str=tz_str, online=True,
-            houses_system_identifier=hs_code,
-        )
-        transit = AstrologicalSubject(
-            name="Current Sky",
-            year=transit_year, month=transit_month, day=transit_day,
-            hour=transit_hour, minute=transit_minute,
-            city=transit_city, nation=transit_nation, tz_str="UTC", online=True,
-            houses_system_identifier=hs_code,
-        )
+        if natal_lat is not None and natal_lng is not None:
+            natal = AstrologicalSubject(
+                name=full_name,
+                year=birth_year, month=birth_month, day=birth_day,
+                hour=birth_hour, minute=birth_minute,
+                lat=natal_lat, lng=natal_lng, tz_str=tz_str, online=False,
+                houses_system_identifier=hs_code,
+            )
+        else:
+            natal = AstrologicalSubject(
+                name=full_name,
+                year=birth_year, month=birth_month, day=birth_day,
+                hour=birth_hour, minute=birth_minute,
+                city=city, nation=nation, tz_str=tz_str, online=True,
+                houses_system_identifier=hs_code,
+            )
+        if transit_lat is not None and transit_lng is not None:
+            transit = AstrologicalSubject(
+                name="Current Sky",
+                year=transit_year, month=transit_month, day=transit_day,
+                hour=transit_hour, minute=transit_minute,
+                lat=transit_lat, lng=transit_lng, tz_str="UTC", online=False,
+                houses_system_identifier=hs_code,
+            )
+        else:
+            transit = AstrologicalSubject(
+                name="Current Sky",
+                year=transit_year, month=transit_month, day=transit_day,
+                hour=transit_hour, minute=transit_minute,
+                city=transit_city, nation=transit_nation, tz_str="UTC", online=True,
+                houses_system_identifier=hs_code,
+            )
         return KerykeionChartSVG(natal, transit, chart_type="Transit").makeTemplate()
     except Exception:
         return ""
@@ -2276,18 +2298,29 @@ def generate_chart_svg(
     birth_hour: int, birth_minute: int,
     city: str, nation: str, tz_str: str,
     house_system: str = "Placidus",
+    lat: float | None = None,
+    lng: float | None = None,
 ) -> str:
     """Render natal chart wheel as an SVG string via kerykeion."""
     try:
         from kerykeion import KerykeionChartSVG
         hs_code = _HOUSE_SYSTEM_CODES.get(house_system, "P")
-        subject = AstrologicalSubject(
-            name=full_name,
-            year=birth_year, month=birth_month, day=birth_day,
-            hour=birth_hour, minute=birth_minute,
-            city=city, nation=nation, tz_str=tz_str, online=True,
-            houses_system_identifier=hs_code,
-        )
+        if lat is not None and lng is not None:
+            subject = AstrologicalSubject(
+                name=full_name,
+                year=birth_year, month=birth_month, day=birth_day,
+                hour=birth_hour, minute=birth_minute,
+                lat=lat, lng=lng, tz_str=tz_str, online=False,
+                houses_system_identifier=hs_code,
+            )
+        else:
+            subject = AstrologicalSubject(
+                name=full_name,
+                year=birth_year, month=birth_month, day=birth_day,
+                hour=birth_hour, minute=birth_minute,
+                city=city, nation=nation, tz_str=tz_str, online=True,
+                houses_system_identifier=hs_code,
+            )
         return KerykeionChartSVG(subject, chart_type="Natal").makeTemplate()
     except Exception:
         return ""
@@ -2719,6 +2752,12 @@ def compute_transits(
         year=year, month=month, day=day, hour=hour, minute=minute,
         city=city, nation=nation, tz_str=tz_str, online=True,
     )
+    # Cache geocoded current-location coords so SVG generation can reuse them
+    try:
+        natal_chart["_current_lat"] = float(getattr(subject, "lat", None) or 0)
+        natal_chart["_current_lng"] = float(getattr(subject, "lng", None) or 0)
+    except (TypeError, ValueError):
+        pass
 
     transit_positions: dict[str, tuple[float, bool]] = {}
     for planet in _PLANETS:

@@ -316,6 +316,8 @@ def compute_astro(state: "AstrologerState") -> dict:
                 city=city, nation=nation,
                 tz_str=state.get("birth_time_timezone") or "UTC",
                 house_system=house_system,
+                lat=chart.get("_natal_lat"),
+                lng=chart.get("_natal_lng"),
             )
         except Exception:
             chart["chart_svg"] = ""
@@ -334,6 +336,10 @@ def compute_astro(state: "AstrologerState") -> dict:
                 transit_city=current_parts[0],
                 transit_nation=current_parts[-1] if len(current_parts) > 1 else "",
                 house_system=house_system,
+                natal_lat=chart.get("_natal_lat"),
+                natal_lng=chart.get("_natal_lng"),
+                transit_lat=chart.get("_current_lat"),
+                transit_lng=chart.get("_current_lng"),
             )
         except Exception:
             chart["transit_svg"] = ""
