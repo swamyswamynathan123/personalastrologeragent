@@ -2175,6 +2175,100 @@ def compute_upcoming_transits(
     return result_list
 
 
+def compute_transit_calendar(
+    natal_chart: dict,
+    current_year: int, current_month: int, current_day: int,
+    current_hour: int, current_minute: int,
+    current_city: str, current_nation: str,
+    months_ahead: int = 12,
+) -> dict[str, list[dict]]:
+    """
+    Month-by-month transit calendar for the next N months.
+    Returns a dict keyed by 'YYYY-MM' with sorted lists of transit events.
+    Only outer transiting planets (Jupiter–Pluto) against all natal points.
+    """
+    from datetime import date, timedelta
+
+    OUTER_PLANETS = ["jupiter", "saturn", "uranus", "neptune", "pluto"]
+    NATAL_POINTS = list(_PLANETS) + ["ascendant", "midheaven", "north_node"]
+    ORB_ENTER = 1.5
+    ORB_EXACT = 0.5
+
+    natal_pos: dict[str, float] = {}
+    for body in NATAL_POINTS:
+        d = natal_chart.get(body)
+        if d and d.get("abs_pos") is not None:
+            natal_pos[body] = d["abs_pos"]
+
+    current_date = date(current_year, current_month, current_day)
+    end_date = current_date + timedelta(days=months_ahead * 30 + 15)
+    # 5-day steps balances accuracy vs. API calls (~75 steps for 12 months)
+    step = 5
+    check_dates = [
+        current_date + timedelta(days=i)
+        for i in range(0, (end_date - current_date).days + 1, step)
+    ]
+
+    # key → event dict (track window from first to last seen, record exact date)
+    transit_events: dict[str, dict] = {}
+
+    for check_date in check_dates:
+        try:
+            transit_subj = AstrologicalSubject(
+                name="Transit",
+                year=check_date.year, month=check_date.month, day=check_date.day,
+                hour=current_hour, minute=current_minute,
+                city=current_city, nation=current_nation, tz_str="UTC", online=True,
+            )
+        except Exception:
+            continue
+
+        for t_planet in OUTER_PLANETS:
+            t_data = _safe_planet(transit_subj, t_planet)
+            if not t_data or t_data.get("abs_pos") is None:
+                continue
+            t_pos = t_data["abs_pos"]
+            t_retro = t_data.get("retrograde", False)
+
+            for n_planet, n_pos in natal_pos.items():
+                result = _find_aspect(t_pos, n_pos, max_orb=ORB_ENTER)
+                if not result:
+                    continue
+                aspect_name, orb = result
+                key = f"{t_planet}|{n_planet}|{aspect_name}"
+                exact_angle = next(a for nm, a, _ in _MAJOR_ASPECTS if nm == aspect_name)
+                applying = _is_applying(t_planet, t_pos, t_retro, n_planet, n_pos, False, exact_angle)
+
+                if key not in transit_events:
+                    transit_events[key] = {
+                        "transiting_planet": t_planet,
+                        "natal_planet": n_planet,
+                        "aspect": aspect_name,
+                        "first_date": check_date.isoformat(),
+                        "last_date": check_date.isoformat(),
+                        "exact_date": check_date.isoformat() if orb <= ORB_EXACT else None,
+                        "min_orb": orb,
+                        "retrograde": t_retro,
+                    }
+                else:
+                    transit_events[key]["last_date"] = check_date.isoformat()
+                    if orb < transit_events[key]["min_orb"]:
+                        transit_events[key]["min_orb"] = orb
+                    if orb <= ORB_EXACT and transit_events[key]["exact_date"] is None:
+                        transit_events[key]["exact_date"] = check_date.isoformat()
+
+    # Group by the month of the exact date (fall back to first_date)
+    monthly: dict[str, list[dict]] = {}
+    for event in transit_events.values():
+        month_key = (event["exact_date"] or event["first_date"])[:7]
+        monthly.setdefault(month_key, []).append(event)
+
+    for month_events in monthly.values():
+        month_events.sort(key=lambda x: (x["exact_date"] or x["first_date"], x["transiting_planet"]))
+
+    return dict(sorted(monthly.items()))
+
+
 def compute_firdaria(
     birth_year: int, birth_month: int, birth_day: int,
     current_year: int, current_month: int, current_day: int,

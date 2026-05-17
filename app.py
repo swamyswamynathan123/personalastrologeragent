@@ -8,11 +8,13 @@ from dotenv import load_dotenv
 from agent.graph import graph, prepare_graph
 from agent.state import AstrologerState
 from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report_stream, answer_synastry_followup_stream
-from astro.compute import compute_chart, compute_synastry
+from astro.compute import compute_chart, compute_synastry, compute_transit_calendar
 from cache.report_cache import purge_expired
+from storage.db import init_db, save_natal, save_synastry, list_charts, load_chart, delete_chart
 
 load_dotenv()
 purge_expired()
+init_db()
 
 st.set_page_config(
     page_title="Personal Astrologer Agent",
@@ -254,6 +256,10 @@ if "_synastry_cache_key" not in st.session_state:
     st.session_state._synastry_cache_key = None
 if "_synastry_cache_prepared" not in st.session_state:
     st.session_state._synastry_cache_prepared = None
+if "_transit_calendar" not in st.session_state:
+    st.session_state._transit_calendar = None
+if "_transit_calendar_key" not in st.session_state:
+    st.session_state._transit_calendar_key = None
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
@@ -353,6 +359,37 @@ with st.sidebar:
             use_container_width=True,
         )
 
+    # My Charts panel — outside the form so buttons work independently
+    st.divider()
+    with st.expander("📚 My Saved Charts", expanded=False):
+        _saved = list_charts()
+        if not _saved:
+            st.caption("No saved charts yet. Generate a reading and click **Save Reading**.")
+        else:
+            for _c in _saved:
+                _icon = "⭐" if _c["chart_type"] == "natal" else "💞"
+                _date = _c["created_at"][:10]
+                _col1, _col2, _col3 = st.columns([4, 1, 1])
+                with _col1:
+                    st.caption(f"{_icon} **{_c['name']}** · {_date}")
+                with _col2:
+                    if st.button("Load", key=f"load_{_c['id']}", use_container_width=True):
+                        _loaded = load_chart(_c["id"])
+                        if _loaded:
+                            if _c["chart_type"] == "natal":
+                                st.session_state.report_result = _loaded
+                                st.session_state.chat_history = []
+                                st.session_state.validation_message = None
+                                st.session_state._prepared_state = None
+                                st.session_state._transit_calendar = None
+                            else:
+                                st.session_state.synastry_result = _loaded
+                            st.rerun()
+                with _col3:
+                    if st.button("✕", key=f"del_{_c['id']}", use_container_width=True):
+                        delete_chart(_c["id"])
+                        st.rerun()
+
 # --- Form submission: validate + compute chart, then stream report in the tab ---
 if submitted:
     st.session_state.report_result = None
@@ -430,7 +467,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-natal_tab, synastry_tab = st.tabs(["My Reading", "Compatibility / Synastry"])
+natal_tab, calendar_tab, synastry_tab = st.tabs(["My Reading", "Transit Calendar", "Compatibility / Synastry"])
 
 with natal_tab:
     if st.session_state.validation_message == "__error__":
@@ -632,6 +669,13 @@ with natal_tab:
             except Exception:
                 st.caption("PDF export unavailable")
 
+        # Save reading
+        _save_col, _ = st.columns([1, 3])
+        with _save_col:
+            if st.button("💾 Save Reading", key="save_natal", use_container_width=True):
+                save_natal(result)
+                st.success("Reading saved! Find it under **My Saved Charts** in the sidebar.")
+
         # Follow-up chat
         st.divider()
         st.subheader("💬 Ask a Follow-up Question")
@@ -662,6 +706,112 @@ with natal_tab:
           <p>Fill in your birth details in the sidebar<br>and click <strong>Generate My Reading</strong> to begin.</p>
         </div>
         """, unsafe_allow_html=True)
+
+_ASPECT_NATURE = {
+    "conjunction": ("neutral", "☌", "#7788dd"),
+    "sextile":     ("harmonious", "✶", "#44bb88"),
+    "trine":       ("harmonious", "△", "#44bb88"),
+    "square":      ("challenging", "□", "#cc6644"),
+    "opposition":  ("challenging", "☍", "#cc6644"),
+}
+
+_MONTH_NAMES = {
+    "01": "January", "02": "February", "03": "March", "04": "April",
+    "05": "May",     "06": "June",     "07": "July",  "08": "August",
+    "09": "September", "10": "October", "11": "November", "12": "December",
+}
+
+
+def _render_calendar(calendar: dict[str, list[dict]]) -> None:
+    if not calendar:
+        st.info("No significant outer-planet transits found in this window.")
+        return
+    for month_key, events in calendar.items():
+        year, mo = month_key.split("-")
+        st.markdown(f"#### {_MONTH_NAMES.get(mo, mo)} {year}")
+        rows = []
+        for e in events:
+            nature, symbol, color = _ASPECT_NATURE.get(e["aspect"], ("neutral", "·", "#aaaaaa"))
+            t_planet = e["transiting_planet"].capitalize()
+            n_planet = e["natal_planet"].replace("_", " ").title()
+            retro = " ℞" if e["retrograde"] else ""
+            exact = e["exact_date"] or e["first_date"]
+            rows.append(
+                f'<tr>'
+                f'<td style="color:#d4bfff;padding:4px 10px;">{t_planet}{retro}</td>'
+                f'<td style="color:{color};text-align:center;padding:4px 8px;">{symbol} {e["aspect"].capitalize()}</td>'
+                f'<td style="color:#c8c0b0;padding:4px 10px;">{n_planet}</td>'
+                f'<td style="color:#9988bb;padding:4px 10px;">{exact}</td>'
+                f'<td style="color:{color};padding:4px 10px;font-size:0.82rem;">{nature.capitalize()}</td>'
+                f'</tr>'
+            )
+        table_html = (
+            '<table style="width:100%;border-collapse:collapse;font-family:Georgia,serif;font-size:0.9rem;">'
+            '<thead><tr>'
+            '<th style="color:#9988bb;text-align:left;padding:4px 10px;border-bottom:1px solid #2e2e4e;">Planet</th>'
+            '<th style="color:#9988bb;text-align:center;padding:4px 8px;border-bottom:1px solid #2e2e4e;">Aspect</th>'
+            '<th style="color:#9988bb;text-align:left;padding:4px 10px;border-bottom:1px solid #2e2e4e;">Natal Point</th>'
+            '<th style="color:#9988bb;text-align:left;padding:4px 10px;border-bottom:1px solid #2e2e4e;">~Date</th>'
+            '<th style="color:#9988bb;text-align:left;padding:4px 10px;border-bottom:1px solid #2e2e4e;">Nature</th>'
+            '</tr></thead><tbody>'
+            + "".join(rows)
+            + "</tbody></table>"
+        )
+        st.markdown(table_html, unsafe_allow_html=True)
+        st.markdown("")
+
+
+with calendar_tab:
+    result_for_cal = st.session_state.report_result
+    if not result_for_cal:
+        st.markdown("""
+        <div class="placeholder-panel">
+          <div class="icon">🗓️</div>
+          <p>Generate your natal reading first,<br>then view your 12-month transit calendar here.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("### 🗓️ 12-Month Outer-Planet Transit Calendar")
+        st.caption(
+            "Shows when Jupiter, Saturn, Uranus, Neptune, and Pluto form major aspects "
+            "to your natal points over the next 12 months. ℞ = planet is retrograde."
+        )
+
+        _cal_key = st.session_state._chart_cache_key
+        if (
+            st.session_state._transit_calendar is not None
+            and st.session_state._transit_calendar_key == _cal_key
+        ):
+            _render_calendar(st.session_state._transit_calendar)
+        else:
+            if st.button("Compute Transit Calendar ✨", type="primary"):
+                _cd = result_for_cal.get("chart_data") or {}
+                _cur_dt_str = result_for_cal.get("parsed_current_datetime") or ""
+                try:
+                    from datetime import datetime as _dt
+                    _cur_dt = _dt.fromisoformat(_cur_dt_str)
+                    _loc_parts = [p.strip() for p in (result_for_cal.get("current_location") or "London, UK").split(",")]
+                    _city = _loc_parts[0]
+                    _nation = _loc_parts[-1] if len(_loc_parts) > 1 else ""
+                    with st.spinner("Scanning the skies for the next 12 months… ✨ (this may take ~30 seconds)"):
+                        _cal = compute_transit_calendar(
+                            natal_chart=_cd,
+                            current_year=_cur_dt.year,
+                            current_month=_cur_dt.month,
+                            current_day=_cur_dt.day,
+                            current_hour=_cur_dt.hour,
+                            current_minute=_cur_dt.minute,
+                            current_city=_city,
+                            current_nation=_nation,
+                        )
+                    st.session_state._transit_calendar = _cal
+                    st.session_state._transit_calendar_key = _cal_key
+                    st.rerun()
+                except Exception as _cal_exc:
+                    st.error(f"Could not compute transit calendar: {_cal_exc}")
+            else:
+                st.caption("Click the button above to scan the next 12 months of transits for your chart.")
+
 
 with synastry_tab:
     if not st.session_state.report_result:
@@ -878,6 +1028,13 @@ with synastry_tab:
                     )
                 except Exception:
                     st.caption("PDF export unavailable")
+
+            # Save synastry
+            _syn_save_col, _ = st.columns([1, 3])
+            with _syn_save_col:
+                if st.button("💾 Save Reading", key="save_synastry", use_container_width=True):
+                    save_synastry(syn)
+                    st.success("Compatibility reading saved! Find it under **My Saved Charts** in the sidebar.")
 
             # Synastry follow-up chat
             st.divider()
