@@ -64,6 +64,14 @@ html, body, [class*="css"] {
     border-color: #8866cc !important;
     box-shadow: 0 0 0 2px rgba(136,102,204,0.25) !important;
 }
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4,
+[data-testid="stSidebar"] h5,
+[data-testid="stSidebar"] h6 {
+    color: #d4bfff !important;
+}
 
 /* ── Primary button ──────────────────────────────────────────────── */
 .stButton > button[kind="primary"],
