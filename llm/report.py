@@ -545,7 +545,8 @@ def _format_lunar_return(lr: dict) -> str:
         lines.append(f"- LR Midheaven: {mc['sign']} {mc['position']}° — the month's career/public focus")
     if moon:
         house = f", LR House {moon['house']}" if moon.get("house") else ""
-        lines.append(f"- LR Moon: {moon['sign']} {moon['position']}°{house} — emotional center of the month")
+        natal_h = f" (natal House {moon['natal_house']})" if moon.get("natal_house") else ""
+        lines.append(f"- LR Moon: {moon['sign']} {moon['position']}°{house}{natal_h} — emotional center of the month")
     angular = lr.get("angular_planets") or []
     if angular:
         ang_str = "; ".join(
@@ -587,6 +588,62 @@ def _format_transit_passes(passes: list[dict]) -> str:
                 f"- {tp}{retro} {p['aspect']} natal {np_} — exact ~{ps['date']} (orb {ps['orb']}°)"
             )
     return "\n".join(lines) if lines else "No outer-planet transits within 0.5° orb over the next 12 months."
+
+
+def _format_almuten_figuris(almuten: dict | None) -> str:
+    if not almuten:
+        return "Almuten Figuris (Chart Ruler by Dignity) unavailable."
+    planet = almuten.get("planet", "?").capitalize()
+    score = almuten.get("score", "?")
+    sign = almuten.get("sign", "?")
+    house = almuten.get("house")
+    dignity = almuten.get("dignity", "")
+    runner_up = (almuten.get("runner_up") or "").capitalize()
+    runner_score = almuten.get("runner_up_score", "?")
+    retro = " (Rx)" if almuten.get("retrograde") else ""
+    house_str = f", House {house}" if house else ""
+    dignity_str = f" — {dignity}" if dignity else ""
+    runner_str = f" (runner-up: {runner_up} at {runner_score} pts)" if runner_up else ""
+    breakdown = almuten.get("breakdown") or {}
+    breakdown_str = ""
+    if breakdown:
+        scored = sorted(breakdown.items(), key=lambda x: -x[1])[:4]
+        parts = ", ".join(f"{p.capitalize()} {v}pts" for p, v in scored)
+        breakdown_str = f"\n  Top scorers: {parts}"
+    return (
+        f"- **{planet}**{retro} in {sign}{house_str}{dignity_str} — "
+        f"scores {score} dignity points as Chart Master{runner_str}{breakdown_str}"
+    )
+
+
+def _format_dispositor_tree(tree: dict | None) -> str:
+    if not tree:
+        return "Dispositor tree unavailable."
+    lines = []
+    chains = tree.get("chains") or {}
+    final = tree.get("final_dispositors") or []
+    single = tree.get("single_final_dispositor")
+    mutual = tree.get("mutual_reception_cycles") or []
+
+    if single:
+        planet = single.capitalize()
+        chain_info = chains.get(single.lower()) or []
+        dependents = [p.capitalize() for p in chain_info if p.lower() != single.lower()]
+        dep_str = f" (disposits: {', '.join(dependents)})" if dependents else ""
+        lines.append(
+            f"- **Sole Final Dispositor: {planet}**{dep_str} — all planets ultimately trace their "
+            f"sign rulership to {planet}. This planet's natal condition colors the entire chart."
+        )
+    elif final:
+        finals_str = " + ".join(p.capitalize() for p in final)
+        lines.append(f"- Final dispositors: **{finals_str}** — the chart's authority is split between these planets.")
+
+    if mutual:
+        for cycle in mutual:
+            cycle_str = " ↔ ".join(p.capitalize() for p in cycle)
+            lines.append(f"- Mutual reception cycle: {cycle_str} — these planets exchange rulership power.")
+
+    return "\n".join(lines) if lines else "No single final dispositor; chart power is distributed."
 
 
 def _compute_convergences(chart: dict, state: "AstrologerState") -> list[str]:
@@ -894,6 +951,8 @@ def build_prompt(state: "AstrologerState") -> str:
         firdaria_section = "## Firdaria Time Lords\n" + _format_firdaria(chart.get("firdaria"), chart)
         solar_return_section = "## Solar Return Chart\n" + _format_solar_return(chart.get("solar_return") or {})
         vedic_section = "## Vedic (Jyotish) Overlay\n" + _format_vedic(chart.get("vedic"))
+        almuten_section = "## Almuten Figuris (Chart Master by Classical Dignities)\n" + _format_almuten_figuris(chart.get("almuten_figuris"))
+        dispositor_section = "## Dispositor Tree (Sign Rulership Chain)\n" + _format_dispositor_tree(chart.get("dispositor_tree"))
         chart_section = "\n\n".join([
             placements, anaretic_section, fixed_stars_section, ruler_section, balance_section, sect_section,
             lunar_phase_section, pof_section, asteroids_section, arabic_section, antiscia_section,
@@ -904,6 +963,7 @@ def build_prompt(state: "AstrologerState") -> str:
             progressions_section, prog_aspects_section, transit_to_progressed_section,
             solar_arcs_section, solar_arc_aspects_section, primary_directions_section,
             profection_section, firdaria_section, solar_return_section, lunar_return_section, vedic_section,
+            almuten_section, dispositor_section,
         ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
@@ -985,6 +1045,9 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Transit-to-progressed: outer planets transiting progressed planetary positions represent a distinct third timing layer. The progressed chart reflects the evolved psychological self, so transits to progressed positions activate themes of the person's current chapter, not just their natal baseline. The progressed Moon is especially sensitive: outer planet aspects to the progressed Moon correlate with emotional turning points that complement but differ from the natal Moon transits. If an outer planet hits the same point in both the natal and progressed chart, the activation is doubled — name this explicitly.
 - Progressed lunation cycle: the angle of the Progressed Moon ahead of the Progressed Sun reveals the psychological phase the person is living in. New Moon phase = a beginning, planting seeds with little visibility; Crescent = effort and resistance; First Quarter = crisis of action; Gibbous = refinement and preparation; Full Moon = culmination, revelation, visibility; Disseminating = sharing and teaching; Last Quarter = crisis of consciousness, questioning structures; Balsamic = release, completion, preparing for a new cycle. The "years to next Progressed New Moon" is a countdown to the next major psychological reset — if under 3 years, the current cycle is ending and new seeds are forming.
 - Fixed stars: only exact conjunctions (1° orb) matter — no other aspects. The 4 Royal Stars (Aldebaran, Regulus, Antares, Fomalhaut) conjunct a luminary or angle are life-defining signatures; Algol conjunct any personal planet or the Ascendant is the chart's most intense pressure point and must be named. Spica, Sirius, Vega near the Sun/Moon/Ascendant indicate distinctive gifts. Weave fixed stars into interpretation naturally — do not list them mechanically.
+
+- Almuten Figuris (Chart Master): the planet accumulating the most essential dignity points at the five power positions (Sun, Moon, ASC, Part of Fortune, Part of Spirit). Unlike the chart ruler (derived from the ASC sign alone), the Almuten is determined by a comprehensive dignity calculation across multiple chart positions — it is the planet that most fundamentally governs the whole person's life direction. When the Almuten and the chart ruler are the same planet, that planet's themes are exceptionally dominant. When they differ, note that the Almuten Figuris operates as the "silent chart ruler" — its natal condition, house, and dignity set a background tone that modifies even the chart ruler's expression. If the Almuten is retrograde or in detriment/fall, the native's core vitality or life direction operates through friction and inner recalibration. Integrate the Almuten in the Personal Overview when its planet differs from the chart ruler, and in Life Direction when the Almuten shares a theme with the nodal axis.
+- Dispositor tree: every planet's sign ruler traces back through a rulership chain to a final dispositor (a planet in its own sign). A chart with a single final dispositor concentrates the entire chart's authority in one planet — all other planets ultimately serve it; its natal condition (sign, house, dignity, aspects) sets the quality of the entire life narrative, even more than individual placements would suggest. When the final dispositor is also the chart ruler or Almuten Figuris, its centrality is tripled. A chart without a single final dispositor (multiple final dispositors or a mutual reception loop) indicates a more distributed power structure: no single planet lords over all others, and the native must consciously integrate competing centres of authority. Mutual reception cycles (two planets in each other's signs) represent a closed loop of cooperative power that operates somewhat independently of the rest of the chart — name them as an area of self-reinforcing talent or recurring dynamic. Integrate the dispositor tree in Section 1 (Overview) when a single final dispositor exists, and in Section 5 (Key Themes) when mutual reception cycles or distributed authority creates a notable pattern.
 
 ## Synthesis Protocol — Complete Mentally Before Writing
 1. READ THE CONVERGENCE INTELLIGENCE BLOCK FIRST. These pre-computed findings are the chart's loudest signals — build the reading around them.

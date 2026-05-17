@@ -980,9 +980,20 @@ def compute_lunar_return(
             } if tenth else None,
         }
 
-        # LR planet positions and Moon house
+        # LR planet positions
         for planet in ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"):
             lr[planet] = _safe_planet(lr_subject, planet)
+
+        # Natal house mapping: which natal house does each LR planet fall in?
+        natal_houses = natal_chart.get("houses") or {}
+        for planet in ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"):
+            p = lr.get(planet)
+            if p and p.get("abs_pos") is not None:
+                natal_h = _house_from_lon(float(p["abs_pos"]), natal_houses)
+                if natal_h:
+                    hn = _HOUSE_NUMBER.get(natal_h)
+                    if hn is not None:
+                        p["natal_house"] = hn
 
         # Angular planets: within 5° of LR ASC or MC
         asc_abs = float(getattr(first, "abs_pos", 0) or 0) if first else None
@@ -2897,5 +2908,15 @@ def compute_chart(
     except (TypeError, ValueError):
         chart["_natal_armc"] = None
         chart["_natal_lat"] = None
+
+    # Almuten Figuris and dispositor tree (computed last; need full chart)
+    try:
+        chart["almuten_figuris"] = compute_almuten_figuris(chart)
+    except Exception:
+        chart["almuten_figuris"] = None
+    try:
+        chart["dispositor_tree"] = compute_dispositor_tree(chart)
+    except Exception:
+        chart["dispositor_tree"] = None
 
     return chart
