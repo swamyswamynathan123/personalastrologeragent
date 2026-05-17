@@ -1210,6 +1210,21 @@ def _build_followup_messages(
     """Build the messages list for a follow-up question (shared by sync and stream variants)."""
     chart = state.get("chart_data") or {}
     if chart:
+        convergences = _compute_convergences(chart, state)
+        convergence_block = ""
+        if convergences:
+            convergence_block = (
+                "\n⚡ CONVERGENCE SIGNALS (highest priority — pre-computed cross-system agreements):\n"
+                + "\n".join(f"▶ {c}" for c in convergences)
+                + "\n"
+            )
+
+        prof = chart.get("profection") or {}
+        monthly_prof_line = _format_monthly_profection(prof)
+        profection_text = _format_profection(prof)
+        if monthly_prof_line:
+            profection_text += "\n" + monthly_prof_line
+
         placements = "\n".join([
             _format_planet("Sun", chart.get("sun")),
             _format_planet("Moon", chart.get("moon")),
@@ -1218,49 +1233,74 @@ def _build_followup_messages(
             _format_planet("Mars", chart.get("mars")),
             _format_planet("Jupiter", chart.get("jupiter")),
             _format_planet("Saturn", chart.get("saturn")),
+            _format_planet("Uranus", chart.get("uranus")),
+            _format_planet("Neptune", chart.get("neptune")),
+            _format_planet("Pluto", chart.get("pluto")),
             _format_planet("Chiron", chart.get("chiron")),
             f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
+            f"- Midheaven: {chart['midheaven']['sign']} {chart['midheaven']['position']}°" if chart.get("midheaven") else "- Midheaven: unavailable",
         ])
+
         chart_summary = (
-            f"{placements}"
-            f"\n\nAnaretic Degrees (29°):\n{_format_anaretic_degrees(chart.get('anaretic_degrees') or [])}"
-            f"\n\nFixed Star Conjunctions:\n{_format_fixed_stars(chart.get('fixed_stars') or [])}"
-            f"\n\nPlanetary Sect:\n{_format_sect(chart.get('sect') or {})}"
+            f"{convergence_block}"
+            f"Natal Placements:\n{placements}"
+            f"\n\nHouse Cusps:\n{_format_houses(chart.get('houses') or {})}"
             f"\n\nChart Ruler:\n{_format_chart_ruler(chart.get('chart_ruler'))}"
+            f"\n\nPlanetary Sect:\n{_format_sect(chart.get('sect') or {})}"
             f"\n\nLunar Phase:\n{_format_lunar_phase(chart.get('lunar_phase') or {})}"
-            f"\n\nPart of Fortune:\n{_format_part_of_fortune(chart.get('part_of_fortune'))}"
-            f"\n\nArabic Parts:\n{_format_arabic_parts(chart.get('arabic_parts') or {})}"
-            f"\n\nAntiscia:\n{_format_antiscia(chart.get('antiscia') or [])}"
-            f"\n\nStelliums:\n{_format_stelliums(chart.get('stelliums') or [])}"
-            f"\n\nMutual Receptions:\n{_format_mutual_receptions(chart.get('mutual_receptions') or [])}"
-            f"\n\nLunar Nodes:\n{_format_nodes(chart)}"
             f"\n\nNatal Aspects:\n{_format_aspects(chart.get('aspects') or [])}"
+            f"\n\nMinor Aspects:\n{_format_minor_aspects(chart.get('minor_aspects') or [])}"
             f"\n\nAspect Patterns:\n{_format_aspect_patterns(chart.get('aspect_patterns') or [])}"
+            f"\n\nMutual Receptions:\n{_format_mutual_receptions(chart.get('mutual_receptions') or [])}"
+            f"\n\nParallel & Contra-Parallel Aspects:\n{_format_parallel_aspects(chart.get('parallel_aspects') or [], chart.get('declinations') or {})}"
+            f"\n\nLunar Nodes:\n{_format_nodes(chart)}"
+            f"\n\nFixed Star Conjunctions:\n{_format_fixed_stars(chart.get('fixed_stars') or [])}"
+            f"\n\nAnaretic Degrees (29°):\n{_format_anaretic_degrees(chart.get('anaretic_degrees') or [])}"
+            f"\n\nStelliums:\n{_format_stelliums(chart.get('stelliums') or [])}"
+            f"\n\nPart of Fortune:\n{_format_part_of_fortune(chart.get('part_of_fortune'))}"
+            f"\n\nAntiscia:\n{_format_antiscia(chart.get('antiscia') or [])}"
             f"\n\nCurrent Transits:\n{_format_transits(chart.get('transits') or [])}"
             f"\n\nUpcoming Transits (90 days):\n{_format_upcoming_transits(chart.get('upcoming_transits') or [])}"
+            f"\n\nTransit Passes — Full 12-Month Pattern:\n{_format_transit_passes(chart.get('transit_passes') or [])}"
+            f"\n\nEclipse Sensitivity:\n{_format_eclipse_sensitivity(chart.get('eclipse_sensitivity') or [])}"
+            f"\n\nRetrograde Stations:\n{_format_retrograde_stations(chart.get('retrograde_stations') or [])}"
             f"\n\nSecondary Progressions:\n{_format_progressions(chart.get('progressions'))}"
             f"\n\nProgressed Aspects to Natal:\n{_format_progressed_aspects(chart.get('progressed_aspects') or [])}"
+            f"\n\nOuter Planets Transiting Progressed Positions:\n{_format_transit_to_progressed(chart.get('transit_to_progressed') or [])}"
             f"\n\nSolar Arc Directions:\n{_format_solar_arcs(chart.get('solar_arcs') or {})}"
             f"\n\nSolar Arc Aspects to Natal:\n{_format_solar_arc_aspects(chart.get('solar_arc_aspects') or [])}"
-            f"\n\nAnnual Profection:\n{_format_profection(chart.get('profection'))}"
+            f"\n\nPrimary Directions (Naibod arc):\n{_format_primary_directions(chart.get('primary_directions') or [])}"
+            f"\n\nAnnual + Monthly Profection:\n{profection_text}"
             f"\n\nFirdaria Time Lords:\n{_format_firdaria(chart.get('firdaria'), chart)}"
             f"\n\nSolar Return Chart:\n{_format_solar_return(chart.get('solar_return') or {})}"
+            f"\n\nLunar Return (next ~27-day cycle):\n{_format_lunar_return(chart.get('lunar_return') or {})}"
+            f"\n\nAlmuten Figuris:\n{_format_almuten_figuris(chart.get('almuten_figuris'))}"
+            f"\n\nDispositor Tree:\n{_format_dispositor_tree(chart.get('dispositor_tree'))}"
+            f"\n\nPrenatal Syzygy Degree:\n{_format_prenatal_syzygy(chart.get('prenatal_syzygy'))}"
+            f"\n\nNatal Parans:\n{_format_parans(chart.get('parans') or [])}"
             f"\n\nVedic (Jyotish) Overlay:\n{_format_vedic(chart.get('vedic'))}"
         )
     else:
         chart_summary = "Natal chart data unavailable."
 
     system = (
-        f"You are a master Western astrologer. You have already provided a full reading for "
+        f"You are a master Western astrologer. You already provided a full reading for "
         f"{state['full_name']} (born {state['parsed_dob']} in {state['birth_location']}, "
-        f"birth time {state['birth_time']} {state.get('birth_time_timezone', '')}).\n\n"
-        f"Their chart data:\n{chart_summary}\n\n"
-        "Answer follow-up questions by reasoning from the chart data above. Rules:\n"
-        "- Every answer must cite at least one specific planet, degree, sign, or house from the chart\n"
-        "- Applying transits and solar arcs are the most time-sensitive — lead with these when discussing timing\n"
-        "- When multiple techniques point to the same theme, name the convergence\n"
-        "- Do NOT invent placements, aspects, or transits not listed in the chart data above\n"
-        "- Speak directly to the person: warm, concise, and actionable"
+        f"birth time {state['birth_time']} {state.get('birth_time_timezone', '')}, "
+        f"current location {state.get('current_location', '')}).\n\n"
+        f"COMPLETE CHART DATA (use this to answer every question with specificity):\n{chart_summary}\n\n"
+        "Rules for follow-up answers:\n"
+        "- ALWAYS cite specific planets, degrees, signs, houses, and dates from the chart data above\n"
+        "- NEVER say chart data is unavailable — it is all provided above\n"
+        "- Lead with the most time-sensitive data: applying transits, primary directions within 1°, "
+        "solar arcs within 1°, and convergence signals\n"
+        "- For timing questions, check transit passes for multi-pass patterns, primary directions, "
+        "monthly profection, and lunar return for the peak month\n"
+        "- For career/10th house questions: check MC sign, 10th house ruler, transits/arcs to MC, "
+        "profection house, Firdaria lord, and solar return angles\n"
+        "- When multiple techniques point to the same theme, name that convergence explicitly\n"
+        "- Do NOT invent placements, aspects, or transits not listed above\n"
+        "- Be direct, warm, and specific — 3–5 focused paragraphs maximum"
     )
     return [
         {"role": "system", "content": system},
