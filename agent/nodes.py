@@ -110,6 +110,24 @@ def normalize_and_parse(state: "AstrologerState") -> dict:
 def compute_astro(state: "AstrologerState") -> dict:
     """Node 5 (optional): Compute natal chart via kerykeion. Gracefully degrades on failure."""
     try:
+        from cache.report_cache import make_chart_key, get_chart, set_chart
+        _current_date = (state.get("parsed_current_datetime") or "")[:10]
+        _cache_key = make_chart_key(
+            dob=state.get("dob") or "",
+            birth_location=state.get("birth_location") or "",
+            birth_time=state.get("birth_time") or "",
+            birth_time_timezone=state.get("birth_time_timezone") or "UTC",
+            house_system=state.get("house_system") or "Placidus",
+            current_location=state.get("current_location") or "",
+            current_date=_current_date,
+        )
+        _cached = get_chart(_cache_key)
+        if _cached:
+            return {"chart_data": _cached}
+    except Exception:
+        _cache_key = None
+
+    try:
         from astro.compute import (
             compute_chart, compute_aspects, compute_transits,
             compute_progressions, compute_progressed_aspects,
@@ -397,6 +415,12 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["transit_passes"] = []
+
+        try:
+            if _cache_key:
+                set_chart(_cache_key, chart)
+        except Exception:
+            pass
 
         return {"chart_data": chart}
     except Exception:

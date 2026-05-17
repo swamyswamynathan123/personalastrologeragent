@@ -11,6 +11,14 @@ import pytest
 from unittest.mock import MagicMock, patch, call
 
 
+@pytest.fixture(autouse=True)
+def _isolated_cache(tmp_path, monkeypatch):
+    """Redirect the cache DB to a fresh temp file for every test so cache
+    hits from one test never bleed into another."""
+    import cache.report_cache as rc
+    monkeypatch.setattr(rc, "_DB_PATH", tmp_path / "test_pipeline_cache.db")
+
+
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------

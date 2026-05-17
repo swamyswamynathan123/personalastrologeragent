@@ -1771,8 +1771,22 @@ def generate_synastry_report_stream(
     name_a: str, dob_a: str, loc_a: str, chart_a: dict,
     name_b: str, dob_b: str, loc_b: str, chart_b: dict,
     synastry: dict,
+    current_date: str = "",
 ):
     """Three-pass synastry pipeline: draft → structural review → factual grounding → stream."""
+    from cache.report_cache import make_synastry_report_key, get_report, set_report
+
+    _cache_key = make_synastry_report_key(
+        dob_a=dob_a, birth_location_a=loc_a, birth_time_a="",
+        dob_b=dob_b, birth_location_b=loc_b, birth_time_b="",
+        current_date=current_date,
+    )
+    _cached = get_report(_cache_key)
+    if _cached:
+        for line in _cached.split("\n"):
+            yield line + "\n"
+        return
+
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     prompt = build_synastry_prompt(name_a, dob_a, loc_a, chart_a, name_b, dob_b, loc_b, chart_b, synastry)
 
@@ -1793,6 +1807,8 @@ def generate_synastry_report_stream(
 
     # Pass 3: factual grounding (placement, cross-aspects, composite, house numbers)
     final = _ground_synastry_report(reviewed, name_a, chart_a, name_b, chart_b, synastry)
+
+    set_report(_cache_key, final)
 
     # Stream the final verified text line by line
     for line in final.split("\n"):
@@ -2111,6 +2127,26 @@ def generate_report(state: "AstrologerState") -> str:
 
 def generate_report_stream(state: "AstrologerState"):
     """Three-pass pipeline: draft → structural review → factual grounding → stream."""
+    from cache.report_cache import make_report_key, get_report, set_report
+
+    _current_date = (state.get("parsed_current_datetime") or "")[:10]
+    _cache_key = make_report_key(
+        dob=state.get("parsed_dob") or "",
+        birth_location=state.get("birth_location") or "",
+        birth_time=state.get("birth_time") or "",
+        birth_time_timezone=state.get("birth_time_timezone") or "UTC",
+        house_system=state.get("house_system") or "Placidus",
+        current_location=state.get("current_location") or "",
+        current_date=_current_date,
+        report_focus=state.get("report_focus") or "",
+        additional_info=state.get("additional_info") or "",
+    )
+    _cached = get_report(_cache_key)
+    if _cached:
+        for line in _cached.split("\n"):
+            yield line + "\n"
+        return
+
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
     # Pass 1: generate draft
@@ -2130,6 +2166,8 @@ def generate_report_stream(state: "AstrologerState"):
 
     # Pass 3: factual grounding against raw chart data
     final = _ground_report(reviewed, state)
+
+    set_report(_cache_key, final)
 
     # Stream the final verified text line by line
     for line in final.split("\n"):

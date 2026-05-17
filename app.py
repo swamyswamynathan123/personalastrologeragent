@@ -9,8 +9,10 @@ from agent.graph import graph, prepare_graph
 from agent.state import AstrologerState
 from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report_stream, answer_synastry_followup_stream
 from astro.compute import compute_chart, compute_synastry
+from cache.report_cache import purge_expired
 
 load_dotenv()
+purge_expired()
 
 st.set_page_config(
     page_title="Personal Astrologer Agent",
@@ -579,21 +581,34 @@ with natal_tab:
 {_report_html_body}
 </body></html>"""
 
-        dl_col1, dl_col2 = st.columns(2)
+        from export.pdf import natal_pdf as _natal_pdf
+        _safe_name = result["full_name"].replace(" ", "_")
+        dl_col1, dl_col2, dl_col3 = st.columns(3)
         with dl_col1:
             st.download_button(
                 label="Download as Markdown",
                 data=result["final_report"],
-                file_name=f"reading_{result['full_name'].replace(' ', '_')}.md",
+                file_name=f"reading_{_safe_name}.md",
                 mime="text/markdown",
             )
         with dl_col2:
             st.download_button(
                 label="Download as HTML",
                 data=_html_export,
-                file_name=f"reading_{result['full_name'].replace(' ', '_')}.html",
+                file_name=f"reading_{_safe_name}.html",
                 mime="text/html",
             )
+        with dl_col3:
+            try:
+                _pdf_bytes = _natal_pdf(result)
+                st.download_button(
+                    label="Download as PDF",
+                    data=_pdf_bytes,
+                    file_name=f"reading_{_safe_name}.pdf",
+                    mime="application/pdf",
+                )
+            except Exception:
+                st.caption("PDF export unavailable")
 
         # Follow-up chat
         st.divider()
@@ -764,10 +779,12 @@ with synastry_tab:
             st.divider()
 
             st.caption("✨ Drafting your compatibility reading (pass 1) → reviewing for accuracy (pass 2) → verifying facts against both charts (pass 3) — this takes ~30 seconds...")
+            _syn_current_date = datetime.now(pytz.UTC).strftime("%Y-%m-%d")
             syn_report_text = st.write_stream(generate_synastry_report_stream(
                 name_a=prep["name_a"], dob_a=prep["dob_a"], loc_a=prep["loc_a"], chart_a=prep["chart_a"],
                 name_b=prep["name_b"], dob_b=prep["dob_b"], loc_b=prep["loc_b"], chart_b=prep["chart_b"],
                 synastry=prep["synastry"],
+                current_date=_syn_current_date,
             ))
 
             st.session_state.synastry_result = {**prep, "report": syn_report_text}
@@ -811,21 +828,34 @@ with synastry_tab:
 {_syn_html_body}
 </body></html>"""
 
-            syn_dl1, syn_dl2 = st.columns(2)
+            from export.pdf import synastry_pdf as _synastry_pdf
+            _syn_safe = f"synastry_{syn['name_a'].replace(' ', '_')}_{syn['name_b'].replace(' ', '_')}"
+            syn_dl1, syn_dl2, syn_dl3 = st.columns(3)
             with syn_dl1:
                 st.download_button(
                     label="Download as Markdown",
                     data=syn["report"],
-                    file_name=f"synastry_{syn['name_a'].replace(' ', '_')}_{syn['name_b'].replace(' ', '_')}.md",
+                    file_name=f"{_syn_safe}.md",
                     mime="text/markdown",
                 )
             with syn_dl2:
                 st.download_button(
                     label="Download as HTML",
                     data=_syn_html,
-                    file_name=f"synastry_{syn['name_a'].replace(' ', '_')}_{syn['name_b'].replace(' ', '_')}.html",
+                    file_name=f"{_syn_safe}.html",
                     mime="text/html",
                 )
+            with syn_dl3:
+                try:
+                    _syn_pdf_bytes = _synastry_pdf(syn)
+                    st.download_button(
+                        label="Download as PDF",
+                        data=_syn_pdf_bytes,
+                        file_name=f"{_syn_safe}.pdf",
+                        mime="application/pdf",
+                    )
+                except Exception:
+                    st.caption("PDF export unavailable")
 
             # Synastry follow-up chat
             st.divider()
