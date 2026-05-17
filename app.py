@@ -188,6 +188,24 @@ html, body, [class*="css"] {
     border-radius: 8px;
 }
 
+/* ── Tabs ────────────────────────────────────────────────────────── */
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    color: #9988bb !important;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+}
+[data-testid="stTabs"] [data-baseweb="tab"]:hover {
+    color: #d4bfff !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
+    color: #d4bfff !important;
+    border-bottom: 2px solid #8866cc !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    border-bottom: 1px solid #2e2e4e;
+    gap: 0.5rem;
+}
+
 /* ── Divider ─────────────────────────────────────────────────────── */
 hr { border-color: #2e2e4e; }
 
