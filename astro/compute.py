@@ -1151,6 +1151,188 @@ def compute_transit_passes(
         return []
 
 
+def compute_declinations(
+    birth_year: int, birth_month: int, birth_day: int,
+    birth_hour: int, birth_minute: int,
+    tz_str: str = "UTC",
+) -> dict:
+    """Return declination (degrees, + = north / - = south) for each planet and angle."""
+    try:
+        import os, swisseph as swe, kerykeion as _kery, pytz as _pytz
+        from datetime import datetime as _dt
+
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+        tz = _pytz.timezone(tz_str or "UTC")
+        local = tz.localize(_dt(birth_year, birth_month, birth_day, birth_hour, birth_minute))
+        utc = local.astimezone(_pytz.UTC)
+        jd = swe.julday(utc.year, utc.month, utc.day, utc.hour + utc.minute / 60.0)
+
+        SEFLG_EQUATORIAL = 2048
+        body_ids = {
+            "sun": swe.SUN, "moon": swe.MOON, "mercury": swe.MERCURY,
+            "venus": swe.VENUS, "mars": swe.MARS, "jupiter": swe.JUPITER,
+            "saturn": swe.SATURN, "uranus": swe.URANUS, "neptune": swe.NEPTUNE,
+            "pluto": swe.PLUTO, "north_node": swe.MEAN_NODE,
+        }
+        try:
+            body_ids["chiron"] = swe.CHIRON
+        except AttributeError:
+            pass
+
+        declinations: dict = {}
+        for name, body_id in body_ids.items():
+            try:
+                pos = swe.calc_ut(jd, body_id, SEFLG_EQUATORIAL)[0]
+                declinations[name] = round(pos[1], 3)
+            except Exception:
+                pass
+
+        # Angles: ecliptic lon → equatorial via obliquity
+        T = (jd - 2451545.0) / 36525.0
+        eps = 23.439291111 - 0.013004167 * T
+        return {"bodies": declinations, "eps": round(eps, 6), "jd": jd}
+    except Exception:
+        return {}
+
+
+def _add_angle_declinations(natal_chart: dict, decl_data: dict) -> dict:
+    """Extend declination dict with ASC and MC using their ecliptic abs_pos."""
+    bodies = dict(decl_data.get("bodies") or {})
+    eps = decl_data.get("eps")
+    if eps is None:
+        return bodies
+    try:
+        import swisseph as swe
+        for angle_name in ("ascendant", "midheaven"):
+            d = natal_chart.get(angle_name)
+            if d and d.get("abs_pos") is not None:
+                eq = swe.cotrans((float(d["abs_pos"]), 0.0, 1.0), -eps)
+                bodies[angle_name] = round(eq[1], 3)
+    except Exception:
+        pass
+    return bodies
+
+
+def compute_parallel_aspects(natal_chart: dict, decl_data: dict, orb: float = 1.0) -> list[dict]:
+    """Find parallel (same declination) and contra-parallel (equal but opposite) aspects."""
+    try:
+        bodies = _add_angle_declinations(natal_chart, decl_data)
+        if not bodies:
+            return []
+
+        body_names = list(bodies.keys())
+        results = []
+        seen: set = set()
+
+        for i, a in enumerate(body_names):
+            for b in body_names[i + 1:]:
+                key = (a, b)
+                if key in seen:
+                    continue
+                seen.add(key)
+                dec_a = bodies[a]
+                dec_b = bodies[b]
+
+                # Parallel: same hemisphere, nearly equal magnitude
+                diff = abs(dec_a - dec_b)
+                if diff <= orb:
+                    results.append({
+                        "planet_a": a, "planet_b": b,
+                        "type": "parallel", "orb": round(diff, 2),
+                        "dec_a": round(dec_a, 2), "dec_b": round(dec_b, 2),
+                    })
+
+                # Contra-parallel: opposite hemispheres, nearly equal magnitude
+                if dec_a * dec_b < 0:  # opposite signs
+                    contra = abs(abs(dec_a) - abs(dec_b))
+                    if contra <= orb:
+                        results.append({
+                            "planet_a": a, "planet_b": b,
+                            "type": "contra-parallel", "orb": round(contra, 2),
+                            "dec_a": round(dec_a, 2), "dec_b": round(dec_b, 2),
+                        })
+
+        return sorted(results, key=lambda x: x["orb"])
+    except Exception:
+        return []
+
+
+def compute_prenatal_syzygy(
+    birth_year: int, birth_month: int, birth_day: int,
+    birth_hour: int, birth_minute: int,
+    tz_str: str = "UTC",
+) -> dict:
+    """Find the last New or Full Moon before birth (prenatal lunation / syzygy).
+
+    The prenatal syzygy degree is the most sensitive point in the natal chart
+    for Hellenistic timing: transits and directions over it resonate chart-wide.
+    """
+    try:
+        import os, swisseph as swe, kerykeion as _kery, pytz as _pytz
+        from datetime import datetime as _dt
+
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+        tz = _pytz.timezone(tz_str or "UTC")
+        local = tz.localize(_dt(birth_year, birth_month, birth_day, birth_hour, birth_minute))
+        utc = local.astimezone(_pytz.UTC)
+        birth_jd = swe.julday(utc.year, utc.month, utc.day,
+                               utc.hour + utc.minute / 60.0)
+
+        def phase_angle(jd: float) -> float:
+            sun = swe.calc_ut(jd, swe.SUN)[0][0]
+            moon = swe.calc_ut(jd, swe.MOON)[0][0]
+            return (moon - sun) % 360
+
+        # Approximate: locate the last NM and FM using mean synodic rate
+        birth_a = phase_angle(birth_jd)
+        days_since_nm = birth_a * 29.53059 / 360.0
+        days_since_fm = ((birth_a - 180) % 360) * 29.53059 / 360.0
+
+        if days_since_nm <= days_since_fm:
+            target, approx_jd = 0.0, birth_jd - days_since_nm
+        else:
+            target, approx_jd = 180.0, birth_jd - days_since_fm
+
+        # Binary search within ±2 days of estimate
+        lo, hi = approx_jd - 2.0, min(approx_jd + 2.0, birth_jd - 0.01)
+        for _ in range(60):
+            mid = (lo + hi) / 2
+            mid_a = phase_angle(mid)
+            dist = (mid_a - target) % 360
+            if dist < 180:  # past target (Moon has moved beyond)
+                hi = mid
+            else:
+                lo = mid
+        exact_jd = (lo + hi) / 2
+
+        # Confirm it's before birth
+        if exact_jd >= birth_jd:
+            exact_jd -= 29.53059
+
+        yr, mo, dy, hr_frac = swe.revjul(exact_jd)
+        hr_int = int(hr_frac)
+        mn_int = int((hr_frac - hr_int) * 60)
+
+        # Syzygy degree = Sun's longitude (NM: Sun = Moon; FM: Sun is 180° from Moon)
+        sun_lon = swe.calc_ut(exact_jd, swe.SUN)[0][0]
+        sign_names = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+                      "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
+        sign_idx = int(sun_lon / 30) % 12
+        sign_pos = round(sun_lon % 30, 2)
+        abs_pos = round(sun_lon, 2)
+
+        return {
+            "type": "new_moon" if target == 0.0 else "full_moon",
+            "date": f"{int(yr)}-{int(mo):02d}-{int(dy):02d}",
+            "time": f"{hr_int:02d}:{mn_int:02d} UTC",
+            "sign": sign_names[sign_idx],
+            "position": sign_pos,
+            "abs_pos": abs_pos,
+        }
+    except Exception:
+        return {}
+
+
 def compute_progressed_aspects(natal_chart: dict, progressions: dict) -> list[dict]:
     """Compute aspects between progressed planets and natal chart points (1° orb)."""
     # Progressed bodies
@@ -2281,7 +2463,7 @@ def compute_profection(
     current_year: int, current_month: int, current_day: int,
     chart: dict,
 ) -> dict:
-    """Annual profection: each year of life activates the next house in sequence."""
+    """Annual profection + monthly sub-profection within the current year."""
     age = current_year - birth_year
     if (current_month, current_day) < (birth_month, birth_day):
         age -= 1
@@ -2291,6 +2473,25 @@ def compute_profection(
     house_sign = house_data.get("sign")
     lord = _SIGN_RULER.get(house_sign) if house_sign else None
     lord_data = chart.get(lord) if lord else None
+
+    # Monthly profection: each month within the profection year activates the next house
+    if (current_year, current_month, current_day) >= (
+            (current_year if (current_month, current_day) >= (birth_month, birth_day) else current_year - 1),
+            birth_month, birth_day):
+        last_bday_year = (current_year if (current_month, current_day) >= (birth_month, birth_day)
+                          else current_year - 1)
+    else:
+        last_bday_year = current_year - 1
+    months_elapsed = (current_year - last_bday_year) * 12 + (current_month - birth_month)
+    if current_day < birth_day:
+        months_elapsed -= 1
+    months_elapsed = max(0, months_elapsed)
+
+    monthly_house = ((profected_house - 1 + months_elapsed) % 12) + 1
+    monthly_house_data = (chart.get("houses") or {}).get(str(monthly_house)) or {}
+    monthly_sign = monthly_house_data.get("sign")
+    monthly_lord = _SIGN_RULER.get(monthly_sign) if monthly_sign else None
+    monthly_lord_data = chart.get(monthly_lord) if monthly_lord else None
 
     return {
         "age": age,
@@ -2302,6 +2503,12 @@ def compute_profection(
         "lord_house": lord_data.get("house") if lord_data else None,
         "lord_retrograde": lord_data.get("retrograde", False) if lord_data else False,
         "lord_dignity": lord_data.get("dignity") if lord_data else None,
+        "monthly_house": monthly_house,
+        "monthly_house_sign": monthly_sign,
+        "monthly_lord": monthly_lord,
+        "monthly_lord_sign": monthly_lord_data.get("sign") if monthly_lord_data else None,
+        "monthly_lord_house": monthly_lord_data.get("house") if monthly_lord_data else None,
+        "months_elapsed": months_elapsed,
     }
 
 
@@ -2908,6 +3115,25 @@ def compute_chart(
     except (TypeError, ValueError):
         chart["_natal_armc"] = None
         chart["_natal_lat"] = None
+
+    # Declinations and parallel/contra-parallel aspects
+    try:
+        decl_data = compute_declinations(
+            birth_year, birth_month, birth_day, birth_hour, birth_minute, tz_str
+        )
+        chart["declinations"] = _add_angle_declinations(chart, decl_data)
+        chart["parallel_aspects"] = compute_parallel_aspects(chart, decl_data)
+    except Exception:
+        chart["declinations"] = {}
+        chart["parallel_aspects"] = []
+
+    # Prenatal lunation (syzygy) degree
+    try:
+        chart["prenatal_syzygy"] = compute_prenatal_syzygy(
+            birth_year, birth_month, birth_day, birth_hour, birth_minute, tz_str
+        )
+    except Exception:
+        chart["prenatal_syzygy"] = {}
 
     # Almuten Figuris and dispositor tree (computed last; need full chart)
     try:

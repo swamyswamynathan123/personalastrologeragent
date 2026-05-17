@@ -646,6 +646,59 @@ def _format_dispositor_tree(tree: dict | None) -> str:
     return "\n".join(lines) if lines else "No single final dispositor; chart power is distributed."
 
 
+def _format_parallel_aspects(aspects: list[dict], declinations: dict) -> str:
+    if not aspects:
+        return "No parallel or contra-parallel aspects within 1° orb."
+    lines = []
+    for a in aspects:
+        pa = a["planet_a"].replace("_", " ").title()
+        pb = a["planet_b"].replace("_", " ").title()
+        kind = a["type"].replace("-", "-")
+        dec_a = a["dec_a"]
+        dec_b = a["dec_b"]
+        hem_a = "N" if dec_a >= 0 else "S"
+        hem_b = "N" if dec_b >= 0 else "S"
+        lines.append(
+            f"- {pa} {kind} {pb} (orb {a['orb']}°) — "
+            f"dec {abs(dec_a)}°{hem_a} / {abs(dec_b)}°{hem_b}"
+        )
+    return "\n".join(lines)
+
+
+def _format_monthly_profection(profection: dict | None) -> str:
+    if not profection:
+        return ""
+    monthly_house = profection.get("monthly_house")
+    monthly_sign = profection.get("monthly_house_sign")
+    monthly_lord = (profection.get("monthly_lord") or "").capitalize()
+    monthly_lord_sign = profection.get("monthly_lord_sign")
+    monthly_lord_house = profection.get("monthly_lord_house")
+    months_elapsed = profection.get("months_elapsed", 0)
+    if not monthly_house:
+        return ""
+    lord_str = ""
+    if monthly_lord:
+        lord_detail = f" in {monthly_lord_sign}" if monthly_lord_sign else ""
+        lord_house = f", House {monthly_lord_house}" if monthly_lord_house else ""
+        lord_str = f"; monthly lord: **{monthly_lord}**{lord_detail}{lord_house}"
+    return (
+        f"- Monthly profection (month {months_elapsed + 1} of year): "
+        f"**House {monthly_house}** ({monthly_sign or '?'}){lord_str}"
+    )
+
+
+def _format_prenatal_syzygy(syzygy: dict | None) -> str:
+    if not syzygy:
+        return "Prenatal lunation (syzygy) unavailable."
+    kind = "New Moon" if syzygy.get("type") == "new_moon" else "Full Moon"
+    return (
+        f"- Prenatal {kind}: **{syzygy.get('sign', '?')} {syzygy.get('position', '?')}°** "
+        f"(abs {syzygy.get('abs_pos', '?')}°) — {syzygy.get('date', '?')} {syzygy.get('time', '')}\n"
+        f"  This degree is the most eclipse-sensitive natal point. Transits and directions "
+        f"within 3° of {syzygy.get('sign', '?')} {syzygy.get('position', '?')}° resonate chart-wide."
+    )
+
+
 def _compute_convergences(chart: dict, state: "AstrologerState") -> list[str]:
     """Detect the same planet activated across multiple timing systems."""
     convergences = []
@@ -947,12 +1000,18 @@ def build_prompt(state: "AstrologerState") -> str:
         transit_to_progressed_section = "## Outer Planet Transits to Progressed Positions\n" + _format_transit_to_progressed(chart.get("transit_to_progressed") or [])
         solar_arcs_section = "## Solar Arc Directions\n" + _format_solar_arcs(chart.get("solar_arcs") or {})
         solar_arc_aspects_section = "## Solar Arc Aspects to Natal Chart\n" + _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
-        profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
         firdaria_section = "## Firdaria Time Lords\n" + _format_firdaria(chart.get("firdaria"), chart)
         solar_return_section = "## Solar Return Chart\n" + _format_solar_return(chart.get("solar_return") or {})
         vedic_section = "## Vedic (Jyotish) Overlay\n" + _format_vedic(chart.get("vedic"))
         almuten_section = "## Almuten Figuris (Chart Master by Classical Dignities)\n" + _format_almuten_figuris(chart.get("almuten_figuris"))
         dispositor_section = "## Dispositor Tree (Sign Rulership Chain)\n" + _format_dispositor_tree(chart.get("dispositor_tree"))
+        parallels_section = "## Parallel & Contra-Parallel Aspects (declination, 1° orb)\n" + _format_parallel_aspects(chart.get("parallel_aspects") or [], chart.get("declinations") or {})
+        syzygy_section = "## Prenatal Lunation (Syzygy Degree)\n" + _format_prenatal_syzygy(chart.get("prenatal_syzygy"))
+        monthly_prof_line = _format_monthly_profection(chart.get("profection"))
+        if monthly_prof_line:
+            profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection")) + "\n" + monthly_prof_line
+        else:
+            profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection"))
         chart_section = "\n\n".join([
             placements, anaretic_section, fixed_stars_section, ruler_section, balance_section, sect_section,
             lunar_phase_section, pof_section, asteroids_section, arabic_section, antiscia_section,
@@ -963,7 +1022,7 @@ def build_prompt(state: "AstrologerState") -> str:
             progressions_section, prog_aspects_section, transit_to_progressed_section,
             solar_arcs_section, solar_arc_aspects_section, primary_directions_section,
             profection_section, firdaria_section, solar_return_section, lunar_return_section, vedic_section,
-            almuten_section, dispositor_section,
+            almuten_section, dispositor_section, parallels_section, syzygy_section,
         ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
@@ -1045,6 +1104,10 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Transit-to-progressed: outer planets transiting progressed planetary positions represent a distinct third timing layer. The progressed chart reflects the evolved psychological self, so transits to progressed positions activate themes of the person's current chapter, not just their natal baseline. The progressed Moon is especially sensitive: outer planet aspects to the progressed Moon correlate with emotional turning points that complement but differ from the natal Moon transits. If an outer planet hits the same point in both the natal and progressed chart, the activation is doubled — name this explicitly.
 - Progressed lunation cycle: the angle of the Progressed Moon ahead of the Progressed Sun reveals the psychological phase the person is living in. New Moon phase = a beginning, planting seeds with little visibility; Crescent = effort and resistance; First Quarter = crisis of action; Gibbous = refinement and preparation; Full Moon = culmination, revelation, visibility; Disseminating = sharing and teaching; Last Quarter = crisis of consciousness, questioning structures; Balsamic = release, completion, preparing for a new cycle. The "years to next Progressed New Moon" is a countdown to the next major psychological reset — if under 3 years, the current cycle is ending and new seeds are forming.
 - Fixed stars: only exact conjunctions (1° orb) matter — no other aspects. The 4 Royal Stars (Aldebaran, Regulus, Antares, Fomalhaut) conjunct a luminary or angle are life-defining signatures; Algol conjunct any personal planet or the Ascendant is the chart's most intense pressure point and must be named. Spica, Sirius, Vega near the Sun/Moon/Ascendant indicate distinctive gifts. Weave fixed stars into interpretation naturally — do not list them mechanically.
+
+- Parallel and contra-parallel declinations: operate like hidden conjunctions and oppositions respectively, active across sign boundaries and often more exact than ecliptic aspects. A parallel (same declination, both north or both south within 1°) functions like a conjunction — the two planets blend and reinforce each other, even if they are in incompatible signs. A contra-parallel (equal but opposite declinations, within 1°) functions like an opposition — awareness, tension, and projection between the two planets. Parallels and contra-parallels involving the Sun, Moon, ASC ruler, or chart ruler are the most significant; they often explain chart dynamics that ecliptic aspects alone do not account for. Weave them naturally into interpretation where they add meaning: a Sun-Saturn contra-parallel operating alongside a Saturn square Sun in the ecliptic creates a double pressure that goes beyond what either aspect alone conveys. Do not list them mechanically — mention only those that reinforce or complicate existing chart themes. Note that parallels cut across sign boundaries: Venus parallel Jupiter means these two benefics cooperate even if they share no ecliptic aspect.
+- Monthly profection: within the annual profection year, each calendar month from the last birthday activates the next house in sequence. The monthly profected house pinpoints which life arena comes into temporary focus for that 30-day period. The monthly profection lord (ruler of the monthly house) becomes a temporary co-ruler of the month alongside the annual lord. If the monthly lord is also currently transited, under a solar arc, or the same as the annual profection lord, that month becomes especially activated. Use the monthly profection in Section 6 (Practical Guidance) to give the most specific monthly advice: "In [month], House [N] is activated, making it the optimal time for [life area]..."
+- Prenatal syzygy (prenatal lunation): the last New Moon or Full Moon before birth establishes the most sensitive degree in the entire natal chart. Planets or angles at this degree (within 3°) carry an intensity that does not show in the standard natal placements — this point is pre-charged before life begins. Any eclipse, transit, solar arc, or primary direction over the prenatal syzygy degree resonates chart-wide, not just in one life area. If a current transit or direction is within 3° of the prenatal syzygy degree, name it in the Current Climate section as a chart-wide amplifier. A natal planet within 1° of the prenatal syzygy degree is one of the most potent placements in the chart — that planet carries the full weight of the prenatal lunar phase and should be mentioned in the Personal Overview.
 
 - Almuten Figuris (Chart Master): the planet accumulating the most essential dignity points at the five power positions (Sun, Moon, ASC, Part of Fortune, Part of Spirit). Unlike the chart ruler (derived from the ASC sign alone), the Almuten is determined by a comprehensive dignity calculation across multiple chart positions — it is the planet that most fundamentally governs the whole person's life direction. When the Almuten and the chart ruler are the same planet, that planet's themes are exceptionally dominant. When they differ, note that the Almuten Figuris operates as the "silent chart ruler" — its natal condition, house, and dignity set a background tone that modifies even the chart ruler's expression. If the Almuten is retrograde or in detriment/fall, the native's core vitality or life direction operates through friction and inner recalibration. Integrate the Almuten in the Personal Overview when its planet differs from the chart ruler, and in Life Direction when the Almuten shares a theme with the nodal axis.
 - Dispositor tree: every planet's sign ruler traces back through a rulership chain to a final dispositor (a planet in its own sign). A chart with a single final dispositor concentrates the entire chart's authority in one planet — all other planets ultimately serve it; its natal condition (sign, house, dignity, aspects) sets the quality of the entire life narrative, even more than individual placements would suggest. When the final dispositor is also the chart ruler or Almuten Figuris, its centrality is tripled. A chart without a single final dispositor (multiple final dispositors or a mutual reception loop) indicates a more distributed power structure: no single planet lords over all others, and the native must consciously integrate competing centres of authority. Mutual reception cycles (two planets in each other's signs) represent a closed loop of cooperative power that operates somewhat independently of the rest of the chart — name them as an area of self-reinforcing talent or recurring dynamic. Integrate the dispositor tree in Section 1 (Overview) when a single final dispositor exists, and in Section 5 (Key Themes) when mutual reception cycles or distributed authority creates a notable pattern.
