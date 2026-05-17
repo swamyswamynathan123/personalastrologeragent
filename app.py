@@ -301,6 +301,40 @@ if "_transit_calendar_key" not in st.session_state:
     st.session_state._transit_calendar_key = None
 if "_save_toast" not in st.session_state:
     st.session_state._save_toast = None
+if "_pending_load" not in st.session_state:
+    st.session_state._pending_load = None
+
+# Drain a pending chart load into widget keys before any widget is instantiated
+if st.session_state._pending_load is not None:
+    _pl = st.session_state._pending_load
+    st.session_state._pending_load = None
+    from datetime import date as _ld, time as _lt
+    try:
+        _yy, _mm, _dd = map(int, (_pl.get("parsed_dob") or "1990-01-01").split("-"))
+        st.session_state["f_dob"] = _ld(_yy, _mm, _dd)
+    except Exception:
+        pass
+    try:
+        _hh, _min = map(int, (_pl.get("birth_time") or "12:00").split(":"))
+        st.session_state["f_birth_time"] = _lt(_hh, _min)
+    except Exception:
+        pass
+    st.session_state["f_full_name"] = _pl.get("full_name") or ""
+    st.session_state["f_birth_location"] = _pl.get("birth_location") or ""
+    st.session_state["f_birth_time_timezone"] = _pl.get("birth_time_timezone") or "UTC"
+    st.session_state["f_birth_time_confidence"] = _pl.get("birth_time_confidence") or "exact"
+    st.session_state["f_house_system"] = _pl.get("house_system") or "Placidus"
+    st.session_state["f_current_location"] = _pl.get("current_location") or ""
+    st.session_state["f_additional_info"] = _pl.get("additional_info") or ""
+    _focus_str = _pl.get("report_focus") or ""
+    _focus_opts = [
+        "Career & Purpose", "Relationships & Love", "Finance & Wealth",
+        "Health & Vitality", "Spirituality & Growth", "Family & Home",
+        "Creativity & Expression", "Travel & Adventure",
+    ]
+    st.session_state["f_report_focus"] = [
+        f.strip() for f in _focus_str.split(",") if f.strip() in _focus_opts
+    ] if _focus_str else []
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
@@ -422,30 +456,8 @@ with st.sidebar:
                                 st.session_state.validation_message = None
                                 st.session_state._prepared_state = None
                                 st.session_state._transit_calendar = None
-                                # Repopulate sidebar form fields
-                                from datetime import date as _d, time as _t
-                                try:
-                                    _yy, _mm, _dd = map(int, (_loaded.get("parsed_dob") or "1990-01-01").split("-"))
-                                    st.session_state["f_dob"] = _d(_yy, _mm, _dd)
-                                except Exception:
-                                    pass
-                                try:
-                                    _hh, _min = map(int, (_loaded.get("birth_time") or "12:00").split(":"))
-                                    st.session_state["f_birth_time"] = _t(_hh, _min)
-                                except Exception:
-                                    pass
-                                st.session_state["f_full_name"] = _loaded.get("full_name") or ""
-                                st.session_state["f_birth_location"] = _loaded.get("birth_location") or ""
-                                st.session_state["f_birth_time_timezone"] = _loaded.get("birth_time_timezone") or "UTC"
-                                st.session_state["f_birth_time_confidence"] = _loaded.get("birth_time_confidence") or "exact"
-                                st.session_state["f_house_system"] = _loaded.get("house_system") or "Placidus"
-                                st.session_state["f_current_location"] = _loaded.get("current_location") or ""
-                                st.session_state["f_additional_info"] = _loaded.get("additional_info") or ""
-                                _focus_str = _loaded.get("report_focus") or ""
-                                st.session_state["f_report_focus"] = [
-                                    f.strip() for f in _focus_str.split(",")
-                                    if f.strip() in _FOCUS_OPTIONS
-                                ] if _focus_str else []
+                                # Schedule form repopulation for the next run
+                                st.session_state._pending_load = _loaded
                             else:
                                 st.session_state.synastry_result = _loaded
                             st.rerun()
