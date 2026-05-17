@@ -257,6 +257,16 @@ if "_synastry_cache_prepared" not in st.session_state:
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
 
+
+def _svg_iframe(svg: str) -> str:
+    """Wrap SVG in an iframe-safe container that forces proper scaling."""
+    return (
+        '<style>svg{width:100%!important;height:auto!important;display:block;}</style>'
+        '<div style="background:#fff;border-radius:12px;padding:1rem;">'
+        f'{svg}'
+        '</div>'
+    )
+
 # ── Sidebar: input form ───────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⭐ Your Details")
@@ -439,21 +449,11 @@ with natal_tab:
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(
-                        f'<div style="background:#fff;border-radius:12px;padding:1rem;'
-                        f'display:flex;justify-content:center;">'
-                        f'<div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
-                        height=640, scrolling=False,
-                    )
+                    st_components.html(_svg_iframe(chart_svg), height=620, scrolling=False)
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(
-                        f'<div style="background:#fff;border-radius:12px;padding:1rem;'
-                        f'display:flex;justify-content:center;">'
-                        f'<div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
-                        height=640, scrolling=False,
-                    )
+                    st_components.html(_svg_iframe(transit_svg), height=620, scrolling=False)
             st.divider()
 
         if st.session_state._stream_error:
@@ -501,12 +501,7 @@ with natal_tab:
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(
-                        f'<div style="background:#fff;border-radius:12px;padding:1rem;'
-                        f'display:flex;justify-content:center;">'
-                        f'<div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
-                        height=640, scrolling=False,
-                    )
+                    st_components.html(_svg_iframe(chart_svg), height=620, scrolling=False)
                     st.download_button(
                         "Download Natal SVG", data=chart_svg,
                         file_name=f"natal_{result['full_name'].replace(' ', '_')}.svg",
@@ -515,12 +510,7 @@ with natal_tab:
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
-                    st_components.html(
-                        f'<div style="background:#fff;border-radius:12px;padding:1rem;'
-                        f'display:flex;justify-content:center;">'
-                        f'<div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
-                        height=640, scrolling=False,
-                    )
+                    st_components.html(_svg_iframe(transit_svg), height=620, scrolling=False)
                     st.download_button(
                         "Download Transit SVG", data=transit_svg,
                         file_name=f"transit_{result['full_name'].replace(' ', '_')}.svg",
