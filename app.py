@@ -446,23 +446,23 @@ with natal_tab:
             tab_labels = []
             if chart_svg:
                 tab_labels.append("Natal Chart")
-            if vedic_svg:
-                tab_labels.append("Vedic Chart")
             if transit_svg:
                 tab_labels.append("Transit Overlay")
+            if vedic_svg:
+                tab_labels.append("Vedic Chart")
             chart_tabs = st.tabs(tab_labels)
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
                     _render_svg(chart_svg)
                 tab_idx += 1
-            if vedic_svg:
-                with chart_tabs[tab_idx]:
-                    _render_svg(vedic_svg)
-                tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
                     _render_svg(transit_svg)
+                tab_idx += 1
+            if vedic_svg:
+                with chart_tabs[tab_idx]:
+                    _render_svg(vedic_svg)
             st.divider()
 
         if st.session_state._stream_error:
@@ -506,10 +506,10 @@ with natal_tab:
             tab_labels = []
             if chart_svg:
                 tab_labels.append("Natal Chart")
-            if vedic_svg:
-                tab_labels.append("Vedic Chart")
             if transit_svg:
                 tab_labels.append("Transit Overlay")
+            if vedic_svg:
+                tab_labels.append("Vedic Chart")
             chart_tabs = st.tabs(tab_labels)
             tab_idx = 0
             if chart_svg:
@@ -521,21 +521,21 @@ with natal_tab:
                         mime="image/svg+xml",
                     )
                 tab_idx += 1
-            if vedic_svg:
-                with chart_tabs[tab_idx]:
-                    _render_svg(vedic_svg)
-                    st.download_button(
-                        "Download Vedic SVG", data=vedic_svg,
-                        file_name=f"vedic_{result['full_name'].replace(' ', '_')}.svg",
-                        mime="image/svg+xml",
-                    )
-                tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
                     _render_svg(transit_svg)
                     st.download_button(
                         "Download Transit SVG", data=transit_svg,
                         file_name=f"transit_{result['full_name'].replace(' ', '_')}.svg",
+                        mime="image/svg+xml",
+                    )
+                tab_idx += 1
+            if vedic_svg:
+                with chart_tabs[tab_idx]:
+                    _render_svg(vedic_svg)
+                    st.download_button(
+                        "Download Vedic SVG", data=vedic_svg,
+                        file_name=f"vedic_{result['full_name'].replace(' ', '_')}.svg",
                         mime="image/svg+xml",
                     )
             st.divider()
