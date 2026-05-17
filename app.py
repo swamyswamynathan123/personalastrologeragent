@@ -345,11 +345,8 @@ with natal_tab:
                     )
             st.divider()
 
-        # Stream the report
-        with st.container():
-            st.markdown('<div class="report-card">', unsafe_allow_html=True)
-            report_text = st.write_stream(generate_report_stream(prepared))
-            st.markdown('</div>', unsafe_allow_html=True)
+        # Stream the report (Streamlit renders markdown natively during streaming)
+        report_text = st.write_stream(generate_report_stream(prepared))
 
         # Persist complete result for future reruns
         st.session_state.report_result = {**prepared, "final_report": report_text}
@@ -454,14 +451,14 @@ with natal_tab:
             st.divider()
 
         # Report rendered in a styled card
+        import markdown as _md
+        _report_html_body = _md.markdown(result["final_report"], extensions=["extra"])
         st.markdown(
-            f'<div class="report-card">{result["final_report"]}</div>',
+            f'<div class="report-card">{_report_html_body}</div>',
             unsafe_allow_html=True,
         )
 
         # Downloads
-        import markdown as _md
-        _report_html_body = _md.markdown(result["final_report"], extensions=["extra"])
         _chart_svg_block = (
             f'<div style="display:flex;justify-content:center;margin:1.5rem 0;">'
             f'<div style="max-width:560px;">{chart_svg}</div></div>'
@@ -658,14 +655,14 @@ with synastry_tab:
                 st.caption(f"{syn['dob_b']} · {syn['loc_b']}")
             st.divider()
 
-            st.markdown(
-                f'<div class="report-card">{syn["report"]}</div>',
-                unsafe_allow_html=True,
-            )
-
             # Synastry downloads
             import markdown as _md2
             _syn_html_body = _md2.markdown(syn["report"], extensions=["extra"])
+            st.markdown(
+                f'<div class="report-card">{_syn_html_body}</div>',
+                unsafe_allow_html=True,
+            )
+
             _syn_html = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Synastry — {syn['name_a']} &amp; {syn['name_b']}</title>
