@@ -1887,8 +1887,202 @@ def _review_report(draft: str, state: "AstrologerState") -> str:
     return response.choices[0].message.content or draft
 
 
+# ---------------------------------------------------------------------------
+# Pass 3: Factual grounding
+# ---------------------------------------------------------------------------
+
+_GROUNDING_SYSTEM = (
+    "You are a fact-checker for astrological chart readings. "
+    "Your only job is to verify that specific factual claims in the reading match the "
+    "ground-truth chart data provided. Be precise and conservative — only remove or correct "
+    "claims that directly contradict the data. Never rewrite for style or completeness. "
+    "Preserve all headings, structure, and interpretive content."
+)
+
+
+def _build_fact_sheet(chart: dict) -> str:
+    """Compact ground-truth reference extracted from raw chart data."""
+    lines: list[str] = ["## Ground-Truth Chart Facts"]
+
+    # Natal placements
+    lines.append("\n### Natal Placements")
+    for p in ["sun", "moon", "mercury", "venus", "mars", "jupiter",
+              "saturn", "uranus", "neptune", "pluto", "chiron"]:
+        d = chart.get(p)
+        if d:
+            retro = " Rx" if d.get("retrograde") else ""
+            house = f", H{d['house']}" if d.get("house") else ""
+            dignity = f" [{d['dignity']}]" if d.get("dignity") else ""
+            lines.append(f"- {p.capitalize()}: {d['sign']} {d['position']}°{retro}{house}{dignity}")
+    asc = chart.get("ascendant")
+    if asc:
+        lines.append(f"- Ascendant: {asc['sign']} {asc['position']}°")
+    mc = chart.get("midheaven")
+    if mc:
+        lines.append(f"- Midheaven: {mc['sign']} {mc['position']}°")
+
+    # Timing lords
+    lines.append("\n### Active Timing Lords")
+    prof = chart.get("profection") or {}
+    if prof:
+        lines.append(
+            f"- Annual Profection: House {prof.get('profected_house')}, "
+            f"Lord of Year: {(prof.get('lord_of_year') or '?').capitalize()}"
+        )
+    fird = chart.get("firdaria") or {}
+    if fird:
+        lines.append(
+            f"- Firdaria Major: {(fird.get('major_lord') or '?').capitalize()}, "
+            f"ends {(fird.get('major_period_end') or '')[:10]}"
+        )
+        if fird.get("sub_lord"):
+            lines.append(
+                f"- Firdaria Sub: {fird['sub_lord'].capitalize()}, "
+                f"ends {(fird.get('sub_period_end') or '')[:10]}"
+            )
+    vedic = chart.get("vedic") or {}
+    dasha = (vedic.get("dasha") or {}) if vedic else {}
+    if dasha:
+        lines.append(
+            f"- Mahadasha: {(dasha.get('mahadasha_lord') or '?').capitalize()}, "
+            f"ends {(dasha.get('mahadasha_end') or '')[:10]}"
+        )
+        if dasha.get("antardasha_lord"):
+            lines.append(
+                f"- Antardasha: {dasha['antardasha_lord'].capitalize()}, "
+                f"ends {(dasha.get('antardasha_end') or '')[:10]}"
+            )
+
+    # Transit passes — most specific timing source
+    passes = chart.get("transit_passes") or []
+    if passes:
+        lines.append("\n### Transit Passes (exact dates, outer planets)")
+        for p in passes[:20]:
+            tp = p["transiting_planet"].capitalize()
+            np_ = p["natal_planet"].replace("_", " ").title()
+            for ps in (p.get("passes") or [])[:3]:
+                retro = " Rx" if ps.get("retrograde") else ""
+                lines.append(
+                    f"- {tp}{retro} {p['aspect']} {np_}: {ps['date']} (orb {ps['orb']}°)"
+                )
+
+    # Upcoming transits (90-day window)
+    upcoming = chart.get("upcoming_transits") or []
+    if upcoming:
+        lines.append("\n### Upcoming Transits (next 90 days)")
+        for t in upcoming[:15]:
+            tp = t["transiting_planet"].capitalize()
+            np_ = t["natal_planet"].replace("_", " ").title()
+            lines.append(
+                f"- {tp} {t['aspect']} {np_}: ~{t.get('exact_date', 'unknown')} "
+                f"(min orb {round(t.get('min_orb', 0), 2)}°)"
+            )
+
+    # Solar arc aspects
+    sa = chart.get("solar_arc_aspects") or []
+    if sa:
+        lines.append("\n### Solar Arc Aspects (within 1°)")
+        for a in sa:
+            dp = a["directed_planet"].replace("arc_", "Arc ").replace("_", " ").title()
+            np_ = a["natal_planet"].replace("_", " ").title()
+            direction = "applying" if a.get("applying") else "separating"
+            lines.append(f"- {dp} {a['aspect']} natal {np_}: orb {a['orb']}°, {direction}")
+
+    # Progressed aspects
+    prog = chart.get("progressed_aspects") or []
+    if prog:
+        lines.append("\n### Progressed Aspects (within 1°)")
+        for a in prog[:10]:
+            pp = a["progressed_planet"].replace("_", " ").title()
+            np_ = a["natal_planet"].replace("_", " ").title()
+            direction = "applying" if a.get("applying") else "separating"
+            lines.append(f"- Progressed {pp} {a['aspect']} natal {np_}: orb {a['orb']}°, {direction}")
+
+    # Primary directions
+    pds = chart.get("primary_directions") or []
+    if pds:
+        lines.append("\n### Primary Directions (within 1°)")
+        for d in pds[:8]:
+            np_ = d["natal_point"].replace("_", " ").title()
+            lines.append(f"- {d['directed_point']} {d['aspect']} natal {np_}: orb {d['orb']}°")
+
+    # Aspect patterns
+    patterns = chart.get("aspect_patterns") or []
+    if patterns:
+        lines.append("\n### Natal Aspect Patterns")
+        for p in patterns:
+            planets_str = ", ".join(pl.replace("_", " ").title() for pl in p["planets"])
+            lines.append(f"- {p['type']}: {planets_str}")
+
+    # Eclipse sensitivity
+    eclipses = chart.get("eclipse_sensitivity") or []
+    if eclipses:
+        lines.append("\n### Eclipse Sensitivity")
+        for e in eclipses[:8]:
+            body = e["body"].replace("_", " ").title()
+            lines.append(
+                f"- {body} within {e['orb']}° of "
+                f"{e.get('eclipse_type', 'eclipse').replace('_', ' ')} on {e['eclipse_date']}"
+            )
+
+    # Retrograde stations
+    stations = chart.get("retrograde_stations") or []
+    if stations:
+        lines.append("\n### Retrograde Stations (within 3° of natal)")
+        for s in stations[:8]:
+            lines.append(
+                f"- {s['planet'].capitalize()} stations {s.get('station_type', '?')} "
+                f"on {s.get('date', '?')} at {s.get('sign', '?')} {s.get('position', '?')}°"
+            )
+
+    return "\n".join(lines)
+
+
+def _build_grounding_prompt(report: str, state: "AstrologerState") -> str:
+    chart = state.get("chart_data") or {}
+    fact_sheet = _build_fact_sheet(chart) if chart else "No chart data available."
+    return f"""Verify the natal chart reading below against the ground-truth chart data.
+
+{fact_sheet}
+
+## Reading to Verify
+{report}
+
+## Verification Instructions
+
+Check ONLY these four types of factual errors:
+
+1. **DATE MISMATCH** — The report names a specific month or date for a transit, solar arc, or primary direction event that does not appear in the Transit Passes, Upcoming Transits, Solar Arc Aspects, or Primary Directions data above. Correct the date using the actual data, or remove the unsupported sentence.
+
+2. **PLACEMENT ERROR** — The report states a planet is in a sign or house that contradicts the Natal Placements data above.
+
+3. **TIMING LORD ERROR** — The report names a Firdaria major/sub lord, Mahadasha/Antardasha lord, or Profection lord of the year that contradicts the Active Timing Lords data above.
+
+4. **INVENTED ASPECT** — The report describes an applying or exact aspect (e.g., "Saturn is squaring your natal Moon") that does not appear in the Transit Passes, Solar Arc Aspects, or Progressed Aspects data above.
+
+Make only the minimum edits required to fix genuine errors. Do not rewrite for style, completeness, or interpretation. If no factual errors are found, reproduce the reading exactly."""
+
+
+def _ground_report(report: str, state: "AstrologerState") -> str:
+    """Factual grounding pass — cross-references report claims against raw chart data."""
+    chart = state.get("chart_data") or {}
+    if not chart:
+        return report  # nothing to ground against
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=4096,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": _GROUNDING_SYSTEM},
+            {"role": "user", "content": _build_grounding_prompt(report, state)},
+        ],
+    )
+    return response.choices[0].message.content or report
+
+
 def generate_report(state: "AstrologerState") -> str:
-    """Blocking two-pass report: draft → self-review → corrected text."""
+    """Blocking three-pass report: draft → structural review → factual grounding."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -1900,11 +2094,12 @@ def generate_report(state: "AstrologerState") -> str:
         ],
     )
     draft = response.choices[0].message.content or ""
-    return _review_report(draft, state)
+    reviewed = _review_report(draft, state)
+    return _ground_report(reviewed, state)
 
 
 def generate_report_stream(state: "AstrologerState"):
-    """Two-pass pipeline: draft (blocking) → self-review (blocking) → stream corrected text."""
+    """Three-pass pipeline: draft → structural review → factual grounding → stream."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
     # Pass 1: generate draft
@@ -1919,9 +2114,12 @@ def generate_report_stream(state: "AstrologerState"):
     )
     draft = draft_resp.choices[0].message.content or ""
 
-    # Pass 2: self-review and correction
-    final = _review_report(draft, state)
+    # Pass 2: structural self-review
+    reviewed = _review_report(draft, state)
 
-    # Pass 3: stream the corrected text line by line
+    # Pass 3: factual grounding against raw chart data
+    final = _ground_report(reviewed, state)
+
+    # Stream the final verified text line by line
     for line in final.split("\n"):
         yield line + "\n"

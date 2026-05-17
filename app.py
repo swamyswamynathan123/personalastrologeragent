@@ -472,7 +472,7 @@ with natal_tab:
                 st.rerun()
         else:
             try:
-                st.caption("✨ Drafting your reading (pass 1) then peer-reviewing for accuracy (pass 2) — this takes ~20 seconds...")
+                st.caption("✨ Drafting your reading (pass 1) → reviewing for consistency (pass 2) → verifying facts against your chart (pass 3) — this takes ~30 seconds...")
                 report_text = st.write_stream(generate_report_stream(prepared))
                 st.session_state.report_result = {**prepared, "final_report": report_text}
                 st.session_state._prepared_state = None
