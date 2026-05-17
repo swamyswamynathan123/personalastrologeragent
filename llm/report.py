@@ -691,12 +691,61 @@ def _format_prenatal_syzygy(syzygy: dict | None) -> str:
     if not syzygy:
         return "Prenatal lunation (syzygy) unavailable."
     kind = "New Moon" if syzygy.get("type") == "new_moon" else "Full Moon"
+    eclipse_note = ""
+    if syzygy.get("was_eclipse"):
+        label = syzygy.get("eclipse_label", "eclipse").replace("_", " ").title()
+        eclipse_note = f" ⚡ **This was a {label}** — the syzygy degree carries eclipse-level intensity."
     return (
         f"- Prenatal {kind}: **{syzygy.get('sign', '?')} {syzygy.get('position', '?')}°** "
-        f"(abs {syzygy.get('abs_pos', '?')}°) — {syzygy.get('date', '?')} {syzygy.get('time', '')}\n"
-        f"  This degree is the most eclipse-sensitive natal point. Transits and directions "
-        f"within 3° of {syzygy.get('sign', '?')} {syzygy.get('position', '?')}° resonate chart-wide."
+        f"(abs {syzygy.get('abs_pos', '?')}°) — {syzygy.get('date', '?')} {syzygy.get('time', '')}"
+        f"{eclipse_note}\n"
+        f"  Transits and directions within 3° of this degree resonate chart-wide."
     )
+
+
+def _format_minor_aspects(aspects: list[dict]) -> str:
+    if not aspects:
+        return "No minor aspects within orb."
+    quintile_family = {"Quintile", "Biquintile"}
+    friction_family = {"Semisquare", "Sesquiquadrate"}
+    lines = []
+    for a in aspects:
+        p1 = a["planet1"].replace("_", " ").title()
+        p2 = a["planet2"].replace("_", " ").title()
+        asp = a["aspect"]
+        orb = a["orb"]
+        applying = a.get("applying")
+        app_str = " (applying)" if applying else " (separating)" if applying is False else ""
+        # Category tag for the LLM
+        if asp in quintile_family:
+            tag = " [creative/talent]"
+        elif asp in friction_family:
+            tag = " [friction/irritant]"
+        elif asp == "Quincunx":
+            tag = " [adjustment/redirection]"
+        elif asp == "Semisextile":
+            tag = " [subtle resource]"
+        else:
+            tag = ""
+        lines.append(f"- {p1} {asp} {p2} (orb {orb}°){app_str}{tag}")
+    return "\n".join(lines)
+
+
+def _format_parans(parans: list[dict]) -> str:
+    if not parans:
+        return "No natal parans within 1.5° orb."
+    lines = []
+    for p in parans:
+        pa = p["planet_a"].capitalize()
+        pb = p["planet_b"].capitalize()
+        aa = p["angle_a"]
+        ab = p["angle_b"]
+        orb = p["orb"]
+        lines.append(
+            f"- {pa} {aa} / {pb} {ab} (orb {orb}°) — "
+            f"these planets are woven together at the angular level"
+        )
+    return "\n".join(lines)
 
 
 def _compute_convergences(chart: dict, state: "AstrologerState") -> list[str]:
@@ -1007,6 +1056,8 @@ def build_prompt(state: "AstrologerState") -> str:
         dispositor_section = "## Dispositor Tree (Sign Rulership Chain)\n" + _format_dispositor_tree(chart.get("dispositor_tree"))
         parallels_section = "## Parallel & Contra-Parallel Aspects (declination, 1° orb)\n" + _format_parallel_aspects(chart.get("parallel_aspects") or [], chart.get("declinations") or {})
         syzygy_section = "## Prenatal Lunation (Syzygy Degree)\n" + _format_prenatal_syzygy(chart.get("prenatal_syzygy"))
+        minor_aspects_section = "## Minor Aspects (semisquare 45°, sesquiquadrate 135°, quintile 72°, biquintile 144°, semisextile 30°, quincunx 150°)\n" + _format_minor_aspects(chart.get("minor_aspects") or [])
+        parans_section = "## Natal Parans (angular simultaneity, 1.5° orb)\n" + _format_parans(chart.get("parans") or [])
         monthly_prof_line = _format_monthly_profection(chart.get("profection"))
         if monthly_prof_line:
             profection_section = "## Annual Profection\n" + _format_profection(chart.get("profection")) + "\n" + monthly_prof_line
@@ -1023,6 +1074,7 @@ def build_prompt(state: "AstrologerState") -> str:
             solar_arcs_section, solar_arc_aspects_section, primary_directions_section,
             profection_section, firdaria_section, solar_return_section, lunar_return_section, vedic_section,
             almuten_section, dispositor_section, parallels_section, syzygy_section,
+            minor_aspects_section, parans_section,
         ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
@@ -1104,6 +1156,9 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Transit-to-progressed: outer planets transiting progressed planetary positions represent a distinct third timing layer. The progressed chart reflects the evolved psychological self, so transits to progressed positions activate themes of the person's current chapter, not just their natal baseline. The progressed Moon is especially sensitive: outer planet aspects to the progressed Moon correlate with emotional turning points that complement but differ from the natal Moon transits. If an outer planet hits the same point in both the natal and progressed chart, the activation is doubled — name this explicitly.
 - Progressed lunation cycle: the angle of the Progressed Moon ahead of the Progressed Sun reveals the psychological phase the person is living in. New Moon phase = a beginning, planting seeds with little visibility; Crescent = effort and resistance; First Quarter = crisis of action; Gibbous = refinement and preparation; Full Moon = culmination, revelation, visibility; Disseminating = sharing and teaching; Last Quarter = crisis of consciousness, questioning structures; Balsamic = release, completion, preparing for a new cycle. The "years to next Progressed New Moon" is a countdown to the next major psychological reset — if under 3 years, the current cycle is ending and new seeds are forming.
 - Fixed stars: only exact conjunctions (1° orb) matter — no other aspects. The 4 Royal Stars (Aldebaran, Regulus, Antares, Fomalhaut) conjunct a luminary or angle are life-defining signatures; Algol conjunct any personal planet or the Ascendant is the chart's most intense pressure point and must be named. Spica, Sirius, Vega near the Sun/Moon/Ascendant indicate distinctive gifts. Weave fixed stars into interpretation naturally — do not list them mechanically.
+
+- Minor aspects: the quintile (72°) and biquintile (144°) reveal creative gifts, talents, and inspired intelligence — they operate differently from the major aspects (which describe personality structures) and instead show where the person can access an almost effortless creative flow or extraordinary facility. A quintile or biquintile to the Sun, Moon, or chart ruler is one of the most reliable indicators of a distinctive gift; to Mercury, it shows unusual cognitive facility; to Venus, aesthetic genius; to Mars, athletic or technical brilliance. Semisquares (45°) and sesquiquadrates (135°) are chronic low-grade friction points — the people or situations described by those planets persistently irritate and push, but that pressure often produces results the person couldn't achieve through harmony alone. The quincunx (150°) demands constant adjustment — the two planets share neither element nor modality and must perpetually relearn how to cooperate; it correlates with health adjustments, career pivots, and relationship patterns requiring ongoing recalibration. The semisextile (30°) is a subtle background resource — use sparingly and only when the planets involved are significant elsewhere. Do not list minor aspects mechanically; integrate them where they add meaning to existing chart themes, especially quintiles/biquintiles to luminaries or angles.
+- Parans (angular simultaneity): a paran forms when two planets simultaneously occupy two different angles (Rising, Setting, MC, IC) at the birth location — they were literally on the horizon and meridian together at the same moment. Unlike ecliptic conjunctions, parans operate regardless of sign or aspect; they bind planets in a permanent relationship at the experiential level of lived life, not the psychological level of aspect patterns. In traditional and Hellenistic practice, paran contacts are among the most powerful chart indicators: they show themes that manifest concretely and repeatedly in outer circumstances. Sun/Moon in paran with a malefic (Saturn, Mars) creates a persistent biographical theme of challenge in the domain of that malefic. Sun/Moon in paran with a benefic creates consistent good fortune in that domain. Parans between two outer planets (Saturn/Uranus/Neptune/Pluto) describe the generational themes the person embodies in their personal life. A paran between a light (Sun/Moon) and any outer planet is a life-defining signature — name it in Section 1 (Overview) if tight (under 0.5°), or in Section 5 (Key Themes) if wider. Do not force parans into every chart; mention only those within 1° orb involving luminaries, angles, or outer planets, and integrate naturally into the reading.
 
 - Parallel and contra-parallel declinations: operate like hidden conjunctions and oppositions respectively, active across sign boundaries and often more exact than ecliptic aspects. A parallel (same declination, both north or both south within 1°) functions like a conjunction — the two planets blend and reinforce each other, even if they are in incompatible signs. A contra-parallel (equal but opposite declinations, within 1°) functions like an opposition — awareness, tension, and projection between the two planets. Parallels and contra-parallels involving the Sun, Moon, ASC ruler, or chart ruler are the most significant; they often explain chart dynamics that ecliptic aspects alone do not account for. Weave them naturally into interpretation where they add meaning: a Sun-Saturn contra-parallel operating alongside a Saturn square Sun in the ecliptic creates a double pressure that goes beyond what either aspect alone conveys. Do not list them mechanically — mention only those that reinforce or complicate existing chart themes. Note that parallels cut across sign boundaries: Venus parallel Jupiter means these two benefics cooperate even if they share no ecliptic aspect.
 - Monthly profection: within the annual profection year, each calendar month from the last birthday activates the next house in sequence. The monthly profected house pinpoints which life arena comes into temporary focus for that 30-day period. The monthly profection lord (ruler of the monthly house) becomes a temporary co-ruler of the month alongside the annual lord. If the monthly lord is also currently transited, under a solar arc, or the same as the annual profection lord, that month becomes especially activated. Use the monthly profection in Section 6 (Practical Guidance) to give the most specific monthly advice: "In [month], House [N] is activated, making it the optimal time for [life area]..."

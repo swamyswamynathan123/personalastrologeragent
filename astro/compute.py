@@ -12,6 +12,15 @@ _MAJOR_ASPECTS = [
     ("Opposition", 180, 8),
 ]
 
+_MINOR_ASPECTS = [
+    ("Semisquare", 45, 2),
+    ("Sesquiquadrate", 135, 2),
+    ("Quintile", 72, 2),
+    ("Biquintile", 144, 2),
+    ("Semisextile", 30, 1.5),
+    ("Quincunx", 150, 3),
+]
+
 _TRANSIT_ORB = 3.0
 
 _PLANET_SPEEDS = {
@@ -331,6 +340,15 @@ def _find_aspect(pos1: float, pos2: float, max_orb: float = 8.0) -> Optional[tup
     for name, angle, orb in _MAJOR_ASPECTS:
         actual_orb = abs(diff - angle)
         if actual_orb <= min(orb, max_orb):
+            return name, round(actual_orb, 2)
+    return None
+
+
+def _find_minor_aspect(pos1: float, pos2: float) -> Optional[tuple[str, float]]:
+    diff = _angular_diff(pos1, pos2)
+    for name, angle, orb in _MINOR_ASPECTS:
+        actual_orb = abs(diff - angle)
+        if actual_orb <= orb:
             return name, round(actual_orb, 2)
     return None
 
@@ -1321,16 +1339,162 @@ def compute_prenatal_syzygy(
         sign_pos = round(sun_lon % 30, 2)
         abs_pos = round(sun_lon, 2)
 
-        return {
+        # Eclipse check: was this syzygy also an eclipse?
+        was_eclipse = False
+        eclipse_label = None
+        try:
+            node_lon = swe.calc_ut(exact_jd, swe.MEAN_NODE)[0][0]
+            moon_lon_at = swe.calc_ut(exact_jd, swe.MOON)[0][0]
+            if target == 0.0:  # New Moon → solar eclipse when Sun within 18.5° of node
+                dist = min((sun_lon - node_lon) % 360, (node_lon - sun_lon) % 360)
+                was_eclipse = dist <= 18.5
+                eclipse_label = "solar eclipse" if was_eclipse else None
+            else:  # Full Moon → lunar eclipse when Moon within 12.5° of node
+                dist = min((moon_lon_at - node_lon) % 360, (node_lon - moon_lon_at) % 360)
+                was_eclipse = dist <= 12.5
+                eclipse_label = "lunar eclipse" if was_eclipse else None
+        except Exception:
+            pass
+
+        result = {
             "type": "new_moon" if target == 0.0 else "full_moon",
             "date": f"{int(yr)}-{int(mo):02d}-{int(dy):02d}",
             "time": f"{hr_int:02d}:{mn_int:02d} UTC",
             "sign": sign_names[sign_idx],
             "position": sign_pos,
             "abs_pos": abs_pos,
+            "was_eclipse": was_eclipse,
         }
+        if eclipse_label:
+            result["eclipse_label"] = eclipse_label
+        return result
     except Exception:
         return {}
+
+
+def compute_minor_aspects(chart: dict) -> list[dict]:
+    """Find minor aspects (semisquare, sesquiquadrate, quintile, biquintile, semisextile, quincunx)
+    between all natal planets and angles."""
+    bodies: dict[str, float] = {}
+    for planet in _PLANETS:
+        d = chart.get(planet)
+        if d and d.get("abs_pos") is not None:
+            bodies[planet] = float(d["abs_pos"])
+    for key in ("ascendant", "midheaven", "north_node", "chiron"):
+        d = chart.get(key)
+        if d and d.get("abs_pos") is not None:
+            bodies[key] = float(d["abs_pos"])
+
+    results = []
+    body_list = list(bodies.items())
+    for i, (p1, pos1) in enumerate(body_list):
+        for p2, pos2 in body_list[i + 1:]:
+            result = _find_minor_aspect(pos1, pos2)
+            if result:
+                aspect_name, orb = result
+                exact_angle = next(a for n, a, _ in _MINOR_ASPECTS if n == aspect_name)
+                p1_retro = (chart.get(p1) or {}).get("retrograde", False)
+                p2_retro = (chart.get(p2) or {}).get("retrograde", False)
+                applying = _is_applying(p1, pos1, p1_retro, p2, pos2, p2_retro, exact_angle)
+                results.append({
+                    "planet1": p1, "planet2": p2,
+                    "aspect": aspect_name, "orb": orb, "applying": applying,
+                })
+    return results
+
+
+def compute_parans(
+    natal_chart: dict,
+    birth_year: int, birth_month: int, birth_day: int,
+    birth_hour: int, birth_minute: int,
+    tz_str: str = "UTC",
+    orb_degrees: float = 1.5,
+) -> list[dict]:
+    """Compute natal parans: pairs of planets on different angles at the same sidereal time.
+
+    A paran (para-Anastenaria) occurs when two planets simultaneously occupy different angles
+    (Rising, Setting, MC, IC) — their energies are woven together at the level of lived experience.
+    Computed analytically from equatorial coordinates: planets' angle-crossing LSTs within orb_degrees.
+    """
+    try:
+        import os, swisseph as swe, kerykeion as _kery, pytz as _pytz, math
+        from datetime import datetime as _dt
+
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+        tz = _pytz.timezone(tz_str or "UTC")
+        local = tz.localize(_dt(birth_year, birth_month, birth_day, birth_hour, birth_minute))
+        utc = local.astimezone(_pytz.UTC)
+        jd = swe.julday(utc.year, utc.month, utc.day, utc.hour + utc.minute / 60.0)
+
+        natal_lat = natal_chart.get("_natal_lat")
+        if natal_lat is None:
+            return []
+        lat_rad = math.radians(float(natal_lat))
+
+        SEFLG_EQUATORIAL = 2048
+        body_ids = {
+            "sun": swe.SUN, "moon": swe.MOON, "mercury": swe.MERCURY,
+            "venus": swe.VENUS, "mars": swe.MARS, "jupiter": swe.JUPITER,
+            "saturn": swe.SATURN, "uranus": swe.URANUS, "neptune": swe.NEPTUNE,
+            "pluto": swe.PLUTO,
+        }
+
+        # Equatorial coordinates at birth
+        eq_pos: dict[str, dict] = {}
+        for name, body_id in body_ids.items():
+            try:
+                pos = swe.calc_ut(jd, body_id, SEFLG_EQUATORIAL)[0]
+                eq_pos[name] = {"ra": pos[0], "dec": pos[1]}
+            except Exception:
+                pass
+
+        # Angle-crossing LSTs for each planet (degrees of RAMC)
+        # MC: LST = RA; IC: LST = RA+180; Rising: LST = RA-H; Setting: LST = RA+H
+        # H = arccos(-tan(lat)*tan(dec))
+        angle_lsts: dict[str, dict[str, float]] = {}
+        for planet, eq in eq_pos.items():
+            ra, dec = eq["ra"], eq["dec"]
+            lsts: dict[str, float] = {
+                "MC": ra % 360,
+                "IC": (ra + 180) % 360,
+            }
+            try:
+                cos_H = -math.tan(lat_rad) * math.tan(math.radians(dec))
+                if abs(cos_H) <= 1.0:
+                    H = math.degrees(math.acos(cos_H))
+                    lsts["Rising"] = (ra - H) % 360
+                    lsts["Setting"] = (ra + H) % 360
+            except (ValueError, ZeroDivisionError):
+                pass
+            angle_lsts[planet] = lsts
+
+        # Find pairs within orb_degrees
+        results = []
+        planet_names = list(angle_lsts.keys())
+        seen: set = set()
+        for i, pa in enumerate(planet_names):
+            for pb in planet_names[i + 1:]:
+                for angle_a, lst_a in angle_lsts[pa].items():
+                    for angle_b, lst_b in angle_lsts[pb].items():
+                        if angle_a == angle_b:
+                            continue
+                        diff = abs(lst_a - lst_b)
+                        if diff > 180:
+                            diff = 360 - diff
+                        if diff <= orb_degrees:
+                            key = tuple(sorted([(pa, angle_a), (pb, angle_b)]))
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            results.append({
+                                "planet_a": pa, "angle_a": angle_a,
+                                "planet_b": pb, "angle_b": angle_b,
+                                "orb": round(diff, 2),
+                            })
+
+        return sorted(results, key=lambda x: x["orb"])
+    except Exception:
+        return []
 
 
 def compute_progressed_aspects(natal_chart: dict, progressions: dict) -> list[dict]:
@@ -3108,13 +3272,32 @@ def compute_chart(
     chart["arabic_parts"] = compute_arabic_parts(chart)
     chart["antiscia"] = compute_antiscia(chart)
 
-    # Store natal metadata needed for primary directions (private fields, not displayed)
+    # Store natal metadata needed for primary directions and parans
     try:
         chart["_natal_armc"] = float(getattr(subject, "armc", None) or 0)
         chart["_natal_lat"] = float(getattr(subject, "lat", None) or 0)
+        chart["_natal_lng"] = float(getattr(subject, "lng", None) or 0)
     except (TypeError, ValueError):
         chart["_natal_armc"] = None
         chart["_natal_lat"] = None
+        chart["_natal_lng"] = None
+
+    # Minor aspects (natal)
+    try:
+        chart["minor_aspects"] = compute_minor_aspects(chart)
+    except Exception:
+        chart["minor_aspects"] = []
+
+    # Parans
+    try:
+        chart["parans"] = compute_parans(
+            natal_chart=chart,
+            birth_year=birth_year, birth_month=birth_month, birth_day=birth_day,
+            birth_hour=birth_hour, birth_minute=birth_minute,
+            tz_str=tz_str,
+        )
+    except Exception:
+        chart["parans"] = []
 
     # Declinations and parallel/contra-parallel aspects
     try:
