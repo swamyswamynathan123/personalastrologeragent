@@ -64,6 +64,12 @@ _DIGNITIES: dict[str, dict[str, list[str]]] = {
     "pluto":   {"domicile": ["Scorpio"],                "exaltation": [],            "detriment": ["Taurus"],               "fall": []},
 }
 
+_HOUSE_SYSTEM_CODES: dict[str, str] = {
+    "Placidus": "P",
+    "Whole Sign": "W",
+    "Koch": "K",
+}
+
 # Modern sign rulers (used for chart ruler and house ruler lookups)
 _SIGN_RULER: dict[str, str] = {
     "Aries": "mars", "Taurus": "venus", "Gemini": "mercury", "Cancer": "moon",
@@ -1184,21 +1190,25 @@ def generate_transit_svg(
     transit_year: int, transit_month: int, transit_day: int,
     transit_hour: int, transit_minute: int,
     transit_city: str, transit_nation: str,
+    house_system: str = "Placidus",
 ) -> str:
     """Render a transit chart overlay SVG (natal wheel + current sky) via kerykeion."""
     try:
         from kerykeion import KerykeionChartSVG
+        hs_code = _HOUSE_SYSTEM_CODES.get(house_system, "P")
         natal = AstrologicalSubject(
             name=full_name,
             year=birth_year, month=birth_month, day=birth_day,
             hour=birth_hour, minute=birth_minute,
             city=city, nation=nation, tz_str=tz_str, online=True,
+            houses_system_identifier=hs_code,
         )
         transit = AstrologicalSubject(
             name="Current Sky",
             year=transit_year, month=transit_month, day=transit_day,
             hour=transit_hour, minute=transit_minute,
             city=transit_city, nation=transit_nation, tz_str="UTC", online=True,
+            houses_system_identifier=hs_code,
         )
         return KerykeionChartSVG(natal, transit, chart_type="Transit").makeTemplate()
     except Exception:
@@ -1210,15 +1220,18 @@ def generate_chart_svg(
     birth_year: int, birth_month: int, birth_day: int,
     birth_hour: int, birth_minute: int,
     city: str, nation: str, tz_str: str,
+    house_system: str = "Placidus",
 ) -> str:
     """Render natal chart wheel as an SVG string via kerykeion."""
     try:
         from kerykeion import KerykeionChartSVG
+        hs_code = _HOUSE_SYSTEM_CODES.get(house_system, "P")
         subject = AstrologicalSubject(
             name=full_name,
             year=birth_year, month=birth_month, day=birth_day,
             hour=birth_hour, minute=birth_minute,
             city=city, nation=nation, tz_str=tz_str, online=True,
+            houses_system_identifier=hs_code,
         )
         return KerykeionChartSVG(subject, chart_type="Natal").makeTemplate()
     except Exception:
@@ -1901,12 +1914,15 @@ def compute_chart(
     birth_year: int, birth_month: int, birth_day: int,
     birth_hour: int, birth_minute: int,
     city: str, nation: str, tz_str: str,
+    house_system: str = "Placidus",
 ) -> dict:
+    hs_code = _HOUSE_SYSTEM_CODES.get(house_system, "P")
     subject = AstrologicalSubject(
         name=full_name,
         year=birth_year, month=birth_month, day=birth_day,
         hour=birth_hour, minute=birth_minute,
         city=city, nation=nation, tz_str=tz_str, online=True,
+        houses_system_identifier=hs_code,
     )
 
     chart = {planet: _safe_planet(subject, planet) for planet in _PLANETS}

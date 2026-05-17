@@ -575,6 +575,7 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - **Date of Birth:** {state['parsed_dob']}
 - **Birth Location:** {state['birth_location']}
 - **Birth Time:** {state['birth_time']} ({state.get('birth_time_timezone', 'timezone not specified')}) [Confidence: {state.get('birth_time_confidence') or 'exact'}]
+- **House System:** {state.get('house_system') or 'Placidus'}
 - **Current Location:** {state['current_location']}
 - **Report Generated As Of:** {state['parsed_current_datetime']}
 - **Report Focus:** {focus}

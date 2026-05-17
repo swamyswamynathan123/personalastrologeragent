@@ -222,6 +222,12 @@ with st.sidebar:
             options=ALL_TIMEZONES,
             index=DEFAULT_TZ_INDEX,
         )
+        house_system = st.selectbox(
+            "House System",
+            options=["Placidus", "Whole Sign", "Koch"],
+            index=0,
+            help="Placidus is standard Western. Whole Sign is used in Hellenistic & Vedic traditions. Koch is popular in German-speaking countries.",
+        )
         current_location = st.text_input(
             "Current Location *",
             placeholder="City, Region, Country",
@@ -258,6 +264,7 @@ if submitted:
         "birth_time": birth_time.strftime("%H:%M") if birth_time else None,
         "birth_time_timezone": birth_time_timezone,
         "birth_time_confidence": birth_time_confidence,
+        "house_system": house_system,
         "current_location": current_location.strip() if current_location else None,
         "additional_info": additional_info.strip() if additional_info else None,
         "report_focus": report_focus.strip() if report_focus else None,
@@ -573,6 +580,7 @@ with synastry_tab:
                             city=b_city,
                             nation=b_nation,
                             tz_str=b_timezone,
+                            house_system=result_a.get("house_system") or "Placidus",
                         )
                         synastry = compute_synastry(chart_a, chart_b)
 

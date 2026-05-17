@@ -125,6 +125,7 @@ def compute_astro(state: "AstrologerState") -> dict:
         location_parts = [p.strip() for p in state["birth_location"].split(",")]
         city = location_parts[0]
         nation = location_parts[-1] if len(location_parts) > 1 else ""
+        house_system = state.get("house_system") or "Placidus"
 
         chart = compute_chart(
             full_name=state["full_name"],
@@ -136,6 +137,7 @@ def compute_astro(state: "AstrologerState") -> dict:
             city=city,
             nation=nation,
             tz_str=state.get("birth_time_timezone") or "UTC",
+            house_system=house_system,
         )
 
         chart["aspects"] = compute_aspects(chart)
@@ -263,6 +265,7 @@ def compute_astro(state: "AstrologerState") -> dict:
                 birth_hour=birth_dt.hour, birth_minute=birth_dt.minute,
                 city=city, nation=nation,
                 tz_str=state.get("birth_time_timezone") or "UTC",
+                house_system=house_system,
             )
         except Exception:
             chart["chart_svg"] = ""
@@ -280,6 +283,7 @@ def compute_astro(state: "AstrologerState") -> dict:
                 transit_hour=current_dt.hour, transit_minute=current_dt.minute,
                 transit_city=current_parts[0],
                 transit_nation=current_parts[-1] if len(current_parts) > 1 else "",
+                house_system=house_system,
             )
         except Exception:
             chart["transit_svg"] = ""
