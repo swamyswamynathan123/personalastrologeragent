@@ -1835,8 +1835,60 @@ _REPORT_SYSTEM = (
     "sitting across from them."
 )
 
+_REVIEW_SYSTEM = (
+    "You are a senior astrology editor. Your only job is to correct specific technical errors "
+    "in a natal chart reading. Be conservative — fix only genuine errors, never rewrite for style. "
+    "Preserve all headings, structure, section order, and approximate length."
+)
+
+
+def _build_review_prompt(draft: str, state: "AstrologerState") -> str:
+    chart = state.get("chart_data") or {}
+    dignity_ctx = _format_dignity_hierarchy(chart) if chart else "Not available."
+    pattern_ctx = _format_aspect_patterns(chart.get("aspect_patterns") or []) if chart else "Not available."
+    rulership_ctx = _format_house_rulerships(chart) if chart else "Not available."
+    return f"""Review the natal chart reading below and fix ONLY these four specific errors if present:
+
+1. **DIGNITY ERROR** — A debilitated planet's Firdaria period, Mahadasha, or major transit is described as straightforwardly positive/constructive without naming the friction, challenge, or required effort. (Use the Dignity Hierarchy below to identify debilitated planets.)
+
+2. **SYSTEM MIXING** — A sentence blends Western tropical and Vedic sidereal interpretations in the same claim without clearly labeling which tradition is speaking (e.g., "your Venus in Scorpio [tropical] shows X while sidereal Venus in Libra shows Y" is correct; "Venus in Scorpio/Libra shows X" is not).
+
+3. **PATTERN SPINE MISSING** — If a major aspect pattern (Grand Cross, T-Square, Yod, Grand Trine, Mystic Rectangle) exists in the chart, the reading must reference it as a structural theme in Section 1 or Section 2. If it appears only as a passing mention elsewhere, bring it forward.
+
+4. **UNSUPPORTED HOUSE CLAIM** — A specific life-area prediction (career, relationships, finances, health) makes no mention of the relevant house ruler's natal condition (sign, dignity, or house placement).
+
+## Reference: Dignity Hierarchy
+{dignity_ctx}
+
+## Reference: Aspect Patterns
+{pattern_ctx}
+
+## Reference: House Rulerships
+{rulership_ctx}
+
+## Reading to Review and Correct
+{draft}
+
+Output the COMPLETE corrected reading. Make only the minimum edits required to fix genuine errors. If no errors are found, reproduce the reading exactly."""
+
+
+def _review_report(draft: str, state: "AstrologerState") -> str:
+    """Self-review pass — returns corrected report text."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=4096,
+        temperature=0.3,
+        messages=[
+            {"role": "system", "content": _REVIEW_SYSTEM},
+            {"role": "user", "content": _build_review_prompt(draft, state)},
+        ],
+    )
+    return response.choices[0].message.content or draft
+
 
 def generate_report(state: "AstrologerState") -> str:
+    """Blocking two-pass report: draft → self-review → corrected text."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -1847,23 +1899,29 @@ def generate_report(state: "AstrologerState") -> str:
             {"role": "user", "content": build_prompt(state)},
         ],
     )
-    return response.choices[0].message.content
+    draft = response.choices[0].message.content or ""
+    return _review_report(draft, state)
 
 
 def generate_report_stream(state: "AstrologerState"):
-    """Streaming variant — yields text chunks for st.write_stream()."""
+    """Two-pass pipeline: draft (blocking) → self-review (blocking) → stream corrected text."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    with client.chat.completions.create(
+
+    # Pass 1: generate draft
+    draft_resp = client.chat.completions.create(
         model="gpt-4o",
         max_tokens=4096,
         temperature=0.7,
-        stream=True,
         messages=[
             {"role": "system", "content": _REPORT_SYSTEM},
             {"role": "user", "content": build_prompt(state)},
         ],
-    ) as stream:
-        for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
+    )
+    draft = draft_resp.choices[0].message.content or ""
+
+    # Pass 2: self-review and correction
+    final = _review_report(draft, state)
+
+    # Pass 3: stream the corrected text line by line
+    for line in final.split("\n"):
+        yield line + "\n"
