@@ -271,6 +271,17 @@ def _render_svg(svg: str) -> None:
     )
 
 # ── Sidebar: input form ───────────────────────────────────────────────────────
+_FOCUS_OPTIONS = [
+    "Career & Purpose",
+    "Relationships & Love",
+    "Finance & Wealth",
+    "Health & Vitality",
+    "Spirituality & Growth",
+    "Family & Home",
+    "Creativity & Expression",
+    "Travel & Adventure",
+]
+
 with st.sidebar:
     st.markdown("## ⭐ Your Details")
 
@@ -317,23 +328,6 @@ with st.sidebar:
         )
 
         st.markdown("#### Optional")
-        _FOCUS_OPTIONS = [
-            "Career & Purpose",
-            "Relationships & Love",
-            "Finance & Wealth",
-            "Health & Vitality",
-            "Spirituality & Growth",
-            "Family & Home",
-            "Creativity & Expression",
-            "Travel & Adventure",
-        ]
-        _focus_selections = st.pills(
-            "Report Focus",
-            options=_FOCUS_OPTIONS,
-            selection_mode="multi",
-            key="f_report_focus",
-        )
-        report_focus = ", ".join(_focus_selections) if _focus_selections else None
         additional_info = st.text_area(
             "Additional Context",
             placeholder="Life events or questions to address…",
@@ -346,6 +340,18 @@ with st.sidebar:
             type="primary",
             use_container_width=True,
         )
+
+    # st.pills must live outside the form — inside a form it can block the
+    # submit button from firing on the second click in some Streamlit versions.
+    st.markdown("#### Report Focus")
+    _focus_selections = st.pills(
+        "Report Focus",
+        options=_FOCUS_OPTIONS,
+        selection_mode="multi",
+        key="f_report_focus",
+        label_visibility="collapsed",
+    )
+    report_focus = ", ".join(_focus_selections) if _focus_selections else None
 
 # --- Form submission: validate + compute chart, then stream report in the tab ---
 if submitted:
