@@ -2287,7 +2287,7 @@ def generate_transit_svg(
                 city=transit_city, nation=transit_nation, tz_str="UTC", online=True,
                 houses_system_identifier=hs_code,
             )
-        return KerykeionChartSVG(natal, transit, chart_type="Transit").makeTemplate()
+        return KerykeionChartSVG(natal, chart_type="Transit", second_obj=transit).makeTemplate()
     except Exception:
         return ""
 
@@ -2747,11 +2747,21 @@ def compute_transits(
     year: int, month: int, day: int, hour: int, minute: int,
     city: str, nation: str, tz_str: str,
 ) -> list[dict]:
-    subject = AstrologicalSubject(
-        name="Transit",
-        year=year, month=month, day=day, hour=hour, minute=minute,
-        city=city, nation=nation, tz_str=tz_str, online=True,
-    )
+    try:
+        subject = AstrologicalSubject(
+            name="Transit",
+            year=year, month=month, day=day, hour=hour, minute=minute,
+            city=city, nation=nation, tz_str=tz_str, online=True,
+        )
+    except Exception:
+        coords = _geocode_with_fallback(city, nation)
+        if coords is None:
+            raise
+        subject = AstrologicalSubject(
+            name="Transit",
+            year=year, month=month, day=day, hour=hour, minute=minute,
+            lat=coords[0], lng=coords[1], tz_str=tz_str, online=False,
+        )
     # Cache geocoded current-location coords so SVG generation can reuse them
     try:
         natal_chart["_current_lat"] = float(getattr(subject, "lat", None) or 0)
@@ -3208,6 +3218,32 @@ def compute_dispositor_tree(chart: dict) -> dict:
     }
 
 
+_geocode_cache: dict[str, tuple[float, float]] = {}
+
+
+def _geocode_with_fallback(city: str, nation: str) -> tuple[float, float] | None:
+    """Geocode a city using Nominatim (OpenStreetMap). No API key required."""
+    key = f"{city.lower().strip()},{nation.lower().strip()}"
+    if key in _geocode_cache:
+        return _geocode_cache[key]
+    try:
+        import requests as _req
+        resp = _req.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": f"{city}, {nation}", "format": "json", "limit": 1},
+            headers={"User-Agent": "PersonalAstrologerAgent/1.0"},
+            timeout=10,
+        )
+        data = resp.json()
+        if data:
+            coords: tuple[float, float] = (float(data[0]["lat"]), float(data[0]["lon"]))
+            _geocode_cache[key] = coords
+            return coords
+    except Exception:
+        pass
+    return None
+
+
 def compute_chart(
     full_name: str,
     birth_year: int, birth_month: int, birth_day: int,
@@ -3216,13 +3252,26 @@ def compute_chart(
     house_system: str = "Placidus",
 ) -> dict:
     hs_code = _HOUSE_SYSTEM_CODES.get(house_system, "P")
-    subject = AstrologicalSubject(
-        name=full_name,
-        year=birth_year, month=birth_month, day=birth_day,
-        hour=birth_hour, minute=birth_minute,
-        city=city, nation=nation, tz_str=tz_str, online=True,
-        houses_system_identifier=hs_code,
-    )
+    # Try kerykeion's GeoNames lookup first (uses SQLite cache); fall back to Nominatim
+    try:
+        subject = AstrologicalSubject(
+            name=full_name,
+            year=birth_year, month=birth_month, day=birth_day,
+            hour=birth_hour, minute=birth_minute,
+            city=city, nation=nation, tz_str=tz_str, online=True,
+            houses_system_identifier=hs_code,
+        )
+    except Exception:
+        coords = _geocode_with_fallback(city, nation)
+        if coords is None:
+            raise
+        subject = AstrologicalSubject(
+            name=full_name,
+            year=birth_year, month=birth_month, day=birth_day,
+            hour=birth_hour, minute=birth_minute,
+            lat=coords[0], lng=coords[1], tz_str=tz_str, online=False,
+            houses_system_identifier=hs_code,
+        )
 
     chart = {planet: _safe_planet(subject, planet) for planet in _PLANETS}
 
