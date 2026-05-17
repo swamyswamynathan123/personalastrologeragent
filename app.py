@@ -605,6 +605,7 @@ with natal_tab:
 
         question = st.chat_input("e.g. What does my Saturn placement mean for my career?")
         if question:
+            st.session_state.chat_history.append({"role": "user", "content": question})
             with st.chat_message("user"):
                 st.markdown(question)
 
@@ -613,8 +614,8 @@ with natal_tab:
                     answer_followup_stream(result, st.session_state.chat_history, question)
                 )
 
-            st.session_state.chat_history.append({"role": "user", "content": question})
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            st.rerun()
 
     else:
         st.markdown("""
@@ -838,6 +839,7 @@ with synastry_tab:
                 key="syn_chat",
             )
             if syn_question:
+                st.session_state.synastry_chat_history.append({"role": "user", "content": syn_question})
                 with st.chat_message("user"):
                     st.markdown(syn_question)
 
@@ -852,5 +854,5 @@ with synastry_tab:
                         )
                     )
 
-                st.session_state.synastry_chat_history.append({"role": "user", "content": syn_question})
                 st.session_state.synastry_chat_history.append({"role": "assistant", "content": syn_answer})
+                st.rerun()
