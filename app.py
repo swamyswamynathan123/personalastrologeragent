@@ -263,49 +263,57 @@ with st.sidebar:
 
     with st.form("astro_form"):
         st.markdown("#### Birth Information")
-        full_name = st.text_input("Full Name *", placeholder="e.g., Jane Doe")
+        full_name = st.text_input("Full Name *", placeholder="e.g., Jane Doe", key="f_full_name")
         dob = st.date_input(
             "Date of Birth *",
             value=None,
             min_value=date(1900, 1, 1),
             max_value=date.today(),
+            key="f_dob",
         )
-        birth_time = st.time_input("Birth Time *", value=None, step=60)
+        birth_time = st.time_input("Birth Time *", value=None, step=60, key="f_birth_time")
         birth_time_confidence = st.selectbox(
             "Birth Time Confidence",
             options=["exact", "approximate", "unknown"],
             index=0,
+            key="f_birth_time_confidence",
             help="How certain are you of the birth time? Approximate/unknown softens house-based interpretations.",
         )
         birth_location = st.text_input(
             "Birth Location *",
             placeholder="City, Region, Country",
+            key="f_birth_location",
         )
         birth_time_timezone = st.selectbox(
             "Birth Timezone *",
             options=ALL_TIMEZONES,
             index=DEFAULT_TZ_INDEX,
+            key="f_birth_time_timezone",
         )
         house_system = st.selectbox(
             "House System",
             options=["Placidus", "Whole Sign", "Koch"],
             index=0,
+            key="f_house_system",
             help="Placidus is standard Western. Whole Sign is used in Hellenistic & Vedic traditions. Koch is popular in German-speaking countries.",
         )
         current_location = st.text_input(
             "Current Location *",
             placeholder="City, Region, Country",
+            key="f_current_location",
         )
 
         st.markdown("#### Optional")
         report_focus = st.text_input(
             "Report Focus",
             placeholder="Career, relationships, spiritual growth…",
+            key="f_report_focus",
         )
         additional_info = st.text_area(
             "Additional Context",
             placeholder="Life events or questions to address…",
             height=100,
+            key="f_additional_info",
         )
 
         submitted = st.form_submit_button(
