@@ -327,10 +327,10 @@ with st.sidebar:
             "Creativity & Expression",
             "Travel & Adventure",
         ]
-        _focus_selections = st.multiselect(
+        _focus_selections = st.pills(
             "Report Focus",
             options=_FOCUS_OPTIONS,
-            placeholder="Select one or more focus areas...",
+            selection_mode="multi",
             key="f_report_focus",
         )
         report_focus = ", ".join(_focus_selections) if _focus_selections else None
