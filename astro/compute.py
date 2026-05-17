@@ -2326,6 +2326,30 @@ def generate_chart_svg(
         return ""
 
 
+def generate_vedic_chart_svg(
+    full_name: str,
+    birth_year: int, birth_month: int, birth_day: int,
+    birth_hour: int, birth_minute: int,
+    tz_str: str,
+    lat: float,
+    lng: float,
+) -> str:
+    """Render a sidereal (Lahiri) natal chart wheel as an SVG string."""
+    try:
+        from kerykeion import KerykeionChartSVG
+        subject = AstrologicalSubject(
+            name=full_name,
+            year=birth_year, month=birth_month, day=birth_day,
+            hour=birth_hour, minute=birth_minute,
+            lat=lat, lng=lng, tz_str=tz_str, online=False,
+            zodiac_type="Sidereal", sidereal_mode="LAHIRI",
+            houses_system_identifier="W",  # Whole Sign is standard for Vedic
+        )
+        return KerykeionChartSVG(subject, chart_type="Natal").makeTemplate()
+    except Exception:
+        return ""
+
+
 def compute_fixed_star_conjunctions(chart: dict, orb: float = 1.0) -> list[dict]:
     """Return natal planets/angles conjunct significant fixed stars within `orb` degrees."""
     bodies: dict[str, float] = {}

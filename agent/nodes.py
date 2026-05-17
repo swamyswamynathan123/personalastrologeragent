@@ -124,7 +124,7 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_primary_directions,
             compute_lunar_return,
             compute_transit_passes,
-            generate_chart_svg, generate_transit_svg,
+            generate_chart_svg, generate_transit_svg, generate_vedic_chart_svg,
         )
 
         birth_dt = datetime.fromisoformat(state["parsed_birth_datetime"])
@@ -321,6 +321,23 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["chart_svg"] = ""
+
+        try:
+            _nat_lat = chart.get("_natal_lat")
+            _nat_lng = chart.get("_natal_lng")
+            if _nat_lat is not None and _nat_lng is not None:
+                chart["vedic_svg"] = generate_vedic_chart_svg(
+                    full_name=state["full_name"],
+                    birth_year=birth_dt.year, birth_month=birth_dt.month, birth_day=birth_dt.day,
+                    birth_hour=birth_dt.hour, birth_minute=birth_dt.minute,
+                    tz_str=state.get("birth_time_timezone") or "UTC",
+                    lat=_nat_lat,
+                    lng=_nat_lng,
+                )
+            else:
+                chart["vedic_svg"] = ""
+        except Exception:
+            chart["vedic_svg"] = ""
 
         try:
             current_dt = datetime.fromisoformat(state["parsed_current_datetime"])

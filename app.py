@@ -437,12 +437,16 @@ with natal_tab:
         st.divider()
 
         # Chart SVGs
-        chart_svg = (prepared.get("chart_data") or {}).get("chart_svg") or ""
-        transit_svg = (prepared.get("chart_data") or {}).get("transit_svg") or ""
-        if chart_svg or transit_svg:
+        _cd0 = prepared.get("chart_data") or {}
+        chart_svg = _cd0.get("chart_svg") or ""
+        vedic_svg = _cd0.get("vedic_svg") or ""
+        transit_svg = _cd0.get("transit_svg") or ""
+        if chart_svg or vedic_svg or transit_svg:
             tab_labels = []
             if chart_svg:
                 tab_labels.append("Natal Chart")
+            if vedic_svg:
+                tab_labels.append("Vedic Chart")
             if transit_svg:
                 tab_labels.append("Transit Overlay")
             chart_tabs = st.tabs(tab_labels)
@@ -450,6 +454,10 @@ with natal_tab:
             if chart_svg:
                 with chart_tabs[tab_idx]:
                     st_components.html(_svg_iframe(chart_svg), height=620, scrolling=False)
+                tab_idx += 1
+            if vedic_svg:
+                with chart_tabs[tab_idx]:
+                    st_components.html(_svg_iframe(vedic_svg), height=620, scrolling=False)
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
@@ -489,12 +497,16 @@ with natal_tab:
         st.divider()
 
         # Chart wheels (natal + transit overlay)
-        chart_svg = (result.get("chart_data") or {}).get("chart_svg") or ""
-        transit_svg = (result.get("chart_data") or {}).get("transit_svg") or ""
-        if chart_svg or transit_svg:
+        _cd1 = result.get("chart_data") or {}
+        chart_svg = _cd1.get("chart_svg") or ""
+        vedic_svg = _cd1.get("vedic_svg") or ""
+        transit_svg = _cd1.get("transit_svg") or ""
+        if chart_svg or vedic_svg or transit_svg:
             tab_labels = []
             if chart_svg:
                 tab_labels.append("Natal Chart")
+            if vedic_svg:
+                tab_labels.append("Vedic Chart")
             if transit_svg:
                 tab_labels.append("Transit Overlay")
             chart_tabs = st.tabs(tab_labels)
@@ -505,6 +517,15 @@ with natal_tab:
                     st.download_button(
                         "Download Natal SVG", data=chart_svg,
                         file_name=f"natal_{result['full_name'].replace(' ', '_')}.svg",
+                        mime="image/svg+xml",
+                    )
+                tab_idx += 1
+            if vedic_svg:
+                with chart_tabs[tab_idx]:
+                    st_components.html(_svg_iframe(vedic_svg), height=620, scrolling=False)
+                    st.download_button(
+                        "Download Vedic SVG", data=vedic_svg,
+                        file_name=f"vedic_{result['full_name'].replace(' ', '_')}.svg",
                         mime="image/svg+xml",
                     )
                 tab_idx += 1
