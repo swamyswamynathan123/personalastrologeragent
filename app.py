@@ -3,6 +3,7 @@ from datetime import datetime, date
 
 import pytz
 import streamlit as st
+import streamlit.components.v1 as st_components
 from dotenv import load_dotenv
 
 from agent.graph import graph, prepare_graph
@@ -440,10 +441,6 @@ with natal_tab:
         chart_svg = (prepared.get("chart_data") or {}).get("chart_svg") or ""
         transit_svg = (prepared.get("chart_data") or {}).get("transit_svg") or ""
         if chart_svg or transit_svg:
-            _svg_style = (
-                "background:#ffffff;border-radius:12px;padding:1.2rem 1rem;"
-                "display:flex;justify-content:center;overflow:auto;"
-            )
             tab_labels = []
             if chart_svg:
                 tab_labels.append("Natal Chart")
@@ -453,16 +450,20 @@ with natal_tab:
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
-                    st.markdown(
-                        f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
-                        unsafe_allow_html=True,
+                    st_components.html(
+                        f'<div style="background:#fff;border-radius:12px;padding:1rem;'
+                        f'display:flex;justify-content:center;">'
+                        f'<div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
+                        height=640, scrolling=False,
                     )
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
-                    st.markdown(
-                        f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
-                        unsafe_allow_html=True,
+                    st_components.html(
+                        f'<div style="background:#fff;border-radius:12px;padding:1rem;'
+                        f'display:flex;justify-content:center;">'
+                        f'<div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
+                        height=640, scrolling=False,
                     )
             st.divider()
 
@@ -502,10 +503,6 @@ with natal_tab:
         chart_svg = (result.get("chart_data") or {}).get("chart_svg") or ""
         transit_svg = (result.get("chart_data") or {}).get("transit_svg") or ""
         if chart_svg or transit_svg:
-            _svg_style = (
-                "background:#ffffff;border-radius:12px;padding:1.2rem 1rem;"
-                "display:flex;justify-content:center;overflow:auto;"
-            )
             tab_labels = []
             if chart_svg:
                 tab_labels.append("Natal Chart")
@@ -515,9 +512,11 @@ with natal_tab:
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
-                    st.markdown(
-                        f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
-                        unsafe_allow_html=True,
+                    st_components.html(
+                        f'<div style="background:#fff;border-radius:12px;padding:1rem;'
+                        f'display:flex;justify-content:center;">'
+                        f'<div style="max-width:580px;width:100%;">{chart_svg}</div></div>',
+                        height=640, scrolling=False,
                     )
                     st.download_button(
                         "Download Natal SVG", data=chart_svg,
@@ -527,9 +526,11 @@ with natal_tab:
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
-                    st.markdown(
-                        f'<div style="{_svg_style}"><div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
-                        unsafe_allow_html=True,
+                    st_components.html(
+                        f'<div style="background:#fff;border-radius:12px;padding:1rem;'
+                        f'display:flex;justify-content:center;">'
+                        f'<div style="max-width:580px;width:100%;">{transit_svg}</div></div>',
+                        height=640, scrolling=False,
                     )
                     st.download_button(
                         "Download Transit SVG", data=transit_svg,
