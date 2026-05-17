@@ -2338,18 +2338,173 @@ def generate_vedic_chart_svg(
     lat: float,
     lng: float,
 ) -> str:
-    """Render a sidereal (Lahiri) natal chart wheel as an SVG string."""
+    """Render a South Indian square Vedic chart (sidereal Lahiri, Whole Sign)."""
     try:
-        from kerykeion import KerykeionChartSVG
         subject = AstrologicalSubject(
             name=full_name,
             year=birth_year, month=birth_month, day=birth_day,
             hour=birth_hour, minute=birth_minute,
             lat=lat, lng=lng, tz_str=tz_str, online=False,
             zodiac_type="Sidereal", sidereal_mode="LAHIRI",
-            houses_system_identifier="W",  # Whole Sign is standard for Vedic
+            houses_system_identifier="W",
         )
-        return KerykeionChartSVG(subject, chart_type="Natal").makeTemplate()
+
+        def _sign_to_idx(sign_str: str) -> int:
+            s = (sign_str or "").strip()
+            if s in _SIGN_ABBREV:
+                return _SIGN_ABBREV[s]
+            sl = s.lower()
+            for i, name in enumerate(_SIGNS):
+                if name.lower() == sl or name[:3].lower() == sl[:3]:
+                    return i
+            return 0
+
+        # Collect planet → sign index
+        _PLANET_ATTRS = [
+            ("sun", "Su"), ("moon", "Mo"), ("mercury", "Me"),
+            ("venus", "Ve"), ("mars", "Ma"), ("jupiter", "Ju"),
+            ("saturn", "Sa"), ("uranus", "Ur"), ("neptune", "Ne"),
+            ("pluto", "Pl"),
+        ]
+        sign_planets: dict[int, list[tuple[str, bool]]] = {i: [] for i in range(12)}
+        for attr, label in _PLANET_ATTRS:
+            p = getattr(subject, attr, None)
+            if p is not None:
+                idx = _sign_to_idx(getattr(p, "sign", "Aries"))
+                retro = bool(getattr(p, "retrograde", False))
+                sign_planets[idx].append((label, retro))
+
+        # Rahu (North Node) and Ketu (South Node = opposite)
+        rahu_p = getattr(subject, "true_node", None)
+        if rahu_p is not None:
+            rahu_idx = _sign_to_idx(getattr(rahu_p, "sign", "Aries"))
+            ketu_idx = (rahu_idx + 6) % 12
+            sign_planets[rahu_idx].append(("Ra", False))
+            sign_planets[ketu_idx].append(("Ke", False))
+
+        # Ascendant sign index
+        asc_house = getattr(subject, "first_house", None)
+        asc_idx = _sign_to_idx(getattr(asc_house, "sign", "Aries")) if asc_house else 0
+
+        # South Indian grid: sign index → (row, col)
+        # Signs are FIXED; Pisces top-left, going clockwise
+        _SIGN_GRID: dict[int, tuple[int, int]] = {
+            11: (0, 0),  # Pisces
+            0:  (0, 1),  # Aries
+            1:  (0, 2),  # Taurus
+            2:  (0, 3),  # Gemini
+            10: (1, 0),  # Aquarius
+            3:  (1, 3),  # Cancer
+            9:  (2, 0),  # Capricorn
+            4:  (2, 3),  # Leo
+            8:  (3, 0),  # Sagittarius
+            7:  (3, 1),  # Scorpio
+            6:  (3, 2),  # Libra
+            5:  (3, 3),  # Virgo
+        }
+        _CENTER = {(1, 1), (1, 2), (2, 1), (2, 2)}
+        _SIGN_SHORT = ["Ar", "Ta", "Ge", "Ca", "Le", "Vi",
+                       "Li", "Sc", "Sg", "Cp", "Aq", "Pi"]
+
+        SIZE = 560
+        CELL = SIZE // 4          # 140 px per cell
+        GRID_Y = 34               # vertical offset for title
+
+        BG      = "#1a1a2e"
+        CELL_BG = "#16162a"
+        ASC_BG  = "#241540"
+        CTR_BG  = "#0f0f1a"
+        BORDER  = "#3a3a60"
+        C_SIGN  = "#8866cc"
+        C_HOUSE = "#6655aa"
+        C_PLT   = "#e8e0d0"
+        C_OUTER = "#8899bb"   # Uranus / Neptune / Pluto (muted)
+        C_NODE  = "#e8b060"   # Rahu / Ketu
+        C_ASC   = "#c8a8f8"
+        C_TITLE = "#d4bfff"
+
+        _OUTER = {"Ur", "Ne", "Pl"}
+        _NODES = {"Ra", "Ke"}
+
+        total_h = GRID_Y + SIZE
+        parts: list[str] = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" '
+            f'viewBox="0 0 {SIZE} {total_h}" '
+            f'style="font-family:Georgia,serif;background:{BG};">',
+            f'<rect width="{SIZE}" height="{total_h}" fill="{BG}"/>',
+            f'<text x="{SIZE // 2}" y="22" text-anchor="middle" '
+            f'fill="{C_TITLE}" font-size="13" font-style="italic">'
+            f'{full_name} — Vedic (South Indian · Lahiri)</text>',
+        ]
+
+        for sign_i, (row, col) in _SIGN_GRID.items():
+            x = col * CELL
+            y = GRID_Y + row * CELL
+            is_asc = (sign_i == asc_idx)
+
+            parts.append(
+                f'<rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" '
+                f'fill="{ASC_BG if is_asc else CELL_BG}" stroke="{BORDER}" stroke-width="1.5"/>'
+            )
+
+            # House number (top-left)
+            house_num = (sign_i - asc_idx) % 12 + 1
+            parts.append(
+                f'<text x="{x + 5}" y="{y + 14}" fill="{C_HOUSE}" font-size="11">'
+                f'{house_num}</text>'
+            )
+
+            # Sign abbreviation (top-right)
+            parts.append(
+                f'<text x="{x + CELL - 5}" y="{y + 14}" text-anchor="end" '
+                f'fill="{C_SIGN}" font-size="11">{_SIGN_SHORT[sign_i]}</text>'
+            )
+
+            # "Asc" badge just below the header row
+            content_y = y + (30 if not is_asc else 44)
+            if is_asc:
+                parts.append(
+                    f'<text x="{x + CELL // 2}" y="{y + 29}" text-anchor="middle" '
+                    f'fill="{C_ASC}" font-size="10" font-weight="bold">Asc</text>'
+                )
+
+            for pi, (pname, retro) in enumerate(sign_planets.get(sign_i, [])):
+                py = content_y + pi * 15
+                if py > y + CELL - 5:
+                    break
+                label = f"{pname}ᴿ" if retro else pname
+                if pname in _NODES:
+                    color = C_NODE
+                elif pname in _OUTER:
+                    color = C_OUTER
+                else:
+                    color = C_PLT
+                parts.append(
+                    f'<text x="{x + CELL // 2}" y="{py}" text-anchor="middle" '
+                    f'fill="{color}" font-size="12">{label}</text>'
+                )
+
+        # Center cells (empty)
+        for (row, col) in _CENTER:
+            x = col * CELL
+            y = GRID_Y + row * CELL
+            parts.append(
+                f'<rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" '
+                f'fill="{CTR_BG}" stroke="{BORDER}" stroke-width="1.5"/>'
+            )
+
+        cx, cy = SIZE // 2, GRID_Y + SIZE // 2
+        parts.append(
+            f'<text x="{cx}" y="{cy - 7}" text-anchor="middle" '
+            f'fill="{C_HOUSE}" font-size="10" font-style="italic">South Indian</text>'
+        )
+        parts.append(
+            f'<text x="{cx}" y="{cy + 9}" text-anchor="middle" '
+            f'fill="{C_HOUSE}" font-size="10" font-style="italic">Lahiri Ayanamsa</text>'
+        )
+
+        parts.append('</svg>')
+        return "\n".join(parts)
     except Exception:
         return ""
 
