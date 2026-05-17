@@ -488,7 +488,7 @@ def _format_retrograde_stations(stations: list[dict]) -> str:
         contacts = s.get("natal_contacts") or []
         if contacts:
             contact_strs = [
-                f"within {c['orb']}° of natal {c['natal_planet'].replace('_', ' ').title()}"
+                f"within {c['orb']}° of natal {c['body'].replace('_', ' ').title()}"
                 for c in contacts
             ]
             lines.append(
@@ -604,12 +604,13 @@ def _format_almuten_figuris(almuten: dict | None) -> str:
     house_str = f", House {house}" if house else ""
     dignity_str = f" — {dignity}" if dignity else ""
     runner_str = f" (runner-up: {runner_up} at {runner_score} pts)" if runner_up else ""
-    breakdown = almuten.get("breakdown") or {}
+    all_scores = almuten.get("all_scores") or {}
     breakdown_str = ""
-    if breakdown:
-        scored = sorted(breakdown.items(), key=lambda x: -x[1])[:4]
-        parts = ", ".join(f"{p.capitalize()} {v}pts" for p, v in scored)
-        breakdown_str = f"\n  Top scorers: {parts}"
+    if all_scores:
+        scored = sorted(all_scores.items(), key=lambda x: -x[1])[:4]
+        parts = ", ".join(f"{p.capitalize()} {v}pts" for p, v in scored if v > 0)
+        if parts:
+            breakdown_str = f"\n  Top scorers: {parts}"
     return (
         f"- **{planet}**{retro} in {sign}{house_str}{dignity_str} — "
         f"scores {score} dignity points as Chart Master{runner_str}{breakdown_str}"
