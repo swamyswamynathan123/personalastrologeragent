@@ -257,13 +257,15 @@ ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
 
 
-def _svg_iframe(svg: str) -> str:
-    """Wrap SVG in an iframe-safe container that forces proper scaling."""
-    return (
-        '<style>svg{width:100%!important;height:auto!important;display:block;}</style>'
-        '<div style="background:#fff;border-radius:12px;padding:1rem;">'
-        f'{svg}'
-        '</div>'
+def _render_svg(svg: str) -> None:
+    """Render an SVG string as a responsive image via base64 data URL."""
+    import base64
+    b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
+    st.markdown(
+        f'<div style="background:#fff;border-radius:12px;padding:1rem;">'
+        f'<img src="data:image/svg+xml;base64,{b64}" '
+        f'style="width:100%;height:auto;display:block;" /></div>',
+        unsafe_allow_html=True,
     )
 
 # ── Sidebar: input form ───────────────────────────────────────────────────────
@@ -452,15 +454,15 @@ with natal_tab:
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
-                    st.html(_svg_iframe(chart_svg))
+                    _render_svg(chart_svg)
                 tab_idx += 1
             if vedic_svg:
                 with chart_tabs[tab_idx]:
-                    st.html(_svg_iframe(vedic_svg))
+                    _render_svg(vedic_svg)
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
-                    st.html(_svg_iframe(transit_svg))
+                    _render_svg(transit_svg)
             st.divider()
 
         if st.session_state._stream_error:
@@ -512,7 +514,7 @@ with natal_tab:
             tab_idx = 0
             if chart_svg:
                 with chart_tabs[tab_idx]:
-                    st.html(_svg_iframe(chart_svg))
+                    _render_svg(chart_svg)
                     st.download_button(
                         "Download Natal SVG", data=chart_svg,
                         file_name=f"natal_{result['full_name'].replace(' ', '_')}.svg",
@@ -521,7 +523,7 @@ with natal_tab:
                 tab_idx += 1
             if vedic_svg:
                 with chart_tabs[tab_idx]:
-                    st.html(_svg_iframe(vedic_svg))
+                    _render_svg(vedic_svg)
                     st.download_button(
                         "Download Vedic SVG", data=vedic_svg,
                         file_name=f"vedic_{result['full_name'].replace(' ', '_')}.svg",
@@ -530,7 +532,7 @@ with natal_tab:
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
-                    st.html(_svg_iframe(transit_svg))
+                    _render_svg(transit_svg)
                     st.download_button(
                         "Download Transit SVG", data=transit_svg,
                         file_name=f"transit_{result['full_name'].replace(' ', '_')}.svg",
