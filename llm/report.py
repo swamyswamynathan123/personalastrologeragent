@@ -953,6 +953,147 @@ def _format_composite(composite: dict, aspects: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _compute_synastry_convergences(
+    name_a: str, chart_a: dict,
+    name_b: str, chart_b: dict,
+    synastry: dict,
+) -> list[str]:
+    """Pre-compute the most significant synastry patterns for prompt injection."""
+    convergences = []
+    cross_aspects = synastry.get("cross_aspects") or []
+    overlays_b_in_a = synastry.get("house_overlays_b_in_a") or []
+    overlays_a_in_b = synastry.get("house_overlays_a_in_b") or []
+    composite = synastry.get("composite") or {}
+
+    # Bucket aspects by sorted planet-pair key
+    pairs: dict[tuple, list[dict]] = {}
+    for a in cross_aspects:
+        pa = (a.get("planet_a") or "").lower()
+        pb = (a.get("planet_b") or "").lower()
+        if not pa or not pb:
+            continue
+        key = tuple(sorted([pa, pb]))
+        pairs.setdefault(key, []).append(a)
+
+    # Mutual luminaries: A's Sun→B's Moon AND A's Moon→B's Sun
+    sun_moon_aspects = pairs.get(("moon", "sun"), [])
+    if len(sun_moon_aspects) >= 2:
+        descs = []
+        for a in sun_moon_aspects:
+            pa = (a.get("planet_a") or "").title()
+            pb = (a.get("planet_b") or "").title()
+            owner_a = name_a if a.get("planet_a", "").lower() == "sun" else name_b
+            owner_b = name_b if a.get("planet_b", "").lower() == "moon" else name_a
+            direction = "applying" if a.get("applying") else "separating"
+            descs.append(f"{name_a}'s {pa} {a['aspect']} {name_b}'s {pb} (orb {a['orb']}°, {direction})")
+        convergences.append(
+            f"MUTUAL LUMINARIES — Both Sun-Moon inter-aspects exist: "
+            + " AND ".join(descs)
+            + f". The deepest compatibility bond: each person's identity nourishes the other's emotional world. "
+            f"This connection has a natural rhythm of give-and-receive that sustains long-term bonds."
+        )
+    elif sun_moon_aspects:
+        a = sun_moon_aspects[0]
+        pa = (a.get("planet_a") or "").title()
+        pb = (a.get("planet_b") or "").title()
+        direction = "applying" if a.get("applying") else "separating"
+        convergences.append(
+            f"SUN-MOON INTER-ASPECT — {name_a}'s {pa} {a['aspect']} {name_b}'s {pb} "
+            f"(orb {a['orb']}°, {direction}). The most fundamental compatibility signature: "
+            f"one person's core identity and the other's emotional nature are directly linked."
+        )
+
+    # Double whammies (non-luminary pairs appearing multiple times)
+    for pair, aspects in pairs.items():
+        if pair == ("moon", "sun"):
+            continue  # handled above
+        if len(aspects) >= 2:
+            p1, p2 = pair
+            descs = []
+            for a in aspects[:3]:
+                direction = "applying" if a.get("applying") else "separating"
+                descs.append(
+                    f"{name_a}'s {(a.get('planet_a') or '').title()} "
+                    f"{a['aspect']} {name_b}'s {(a.get('planet_b') or '').title()} "
+                    f"(orb {a['orb']}°, {direction})"
+                )
+            convergences.append(
+                f"DOUBLE WHAMMY — {p1.title()}-{p2.title()} connected in {len(aspects)} aspects: "
+                + " AND ".join(descs)
+                + f". This planet-pair is the central axis of the connection — its themes are unavoidable and defining."
+            )
+
+    # Saturn cross-aspects to luminaries (hard aspects only)
+    saturn_contacts = []
+    hard_aspects = {"square", "opposition", "conjunction"}
+    for a in cross_aspects:
+        pa = (a.get("planet_a") or "").lower()
+        pb = (a.get("planet_b") or "").lower()
+        asp = (a.get("aspect") or "").lower()
+        if asp not in hard_aspects:
+            continue
+        if pa == "saturn" and pb in ("sun", "moon"):
+            direction = "applying" if a.get("applying") else "separating"
+            saturn_contacts.append(
+                f"{name_a}'s Saturn {a['aspect']} {name_b}'s {pb.title()} (orb {a['orb']}°, {direction})"
+            )
+        elif pb == "saturn" and pa in ("sun", "moon"):
+            direction = "applying" if a.get("applying") else "separating"
+            saturn_contacts.append(
+                f"{name_b}'s Saturn {a['aspect']} {name_a}'s {pa.title()} (orb {a['orb']}°, {direction})"
+            )
+    if saturn_contacts:
+        convergences.append(
+            f"SATURN-LUMINARY CONTACT — {'; '.join(saturn_contacts)}. "
+            f"The relationship's primary structural dynamic: reality-testing, discipline, and long-term commitment. "
+            f"Can feel restricting early; becomes deeply stabilizing when worked with consciously."
+        )
+
+    # Angular planet overlays (guest planet in host's houses 1, 4, 7, 10)
+    angular_houses = {1, 4, 7, 10}
+    angular_overlays = []
+    for o in overlays_b_in_a:
+        try:
+            if int(o.get("house_in_partner", 0)) in angular_houses:
+                p = o["planet"].replace("_", " ").title()
+                angular_overlays.append(f"{name_b}'s {p} in {name_a}'s House {o['house_in_partner']}")
+        except (TypeError, ValueError):
+            pass
+    for o in overlays_a_in_b:
+        try:
+            if int(o.get("house_in_partner", 0)) in angular_houses:
+                p = o["planet"].replace("_", " ").title()
+                angular_overlays.append(f"{name_a}'s {p} in {name_b}'s House {o['house_in_partner']}")
+        except (TypeError, ValueError):
+            pass
+    if len(angular_overlays) >= 3:
+        convergences.append(
+            f"ANGULAR SATURATION — {len(angular_overlays)} planets fall in angular houses (1/4/7/10): "
+            + "; ".join(angular_overlays[:5])
+            + ". Angular overlays create visceral, structural activation — these people fundamentally reshape each other's life."
+        )
+    elif angular_overlays:
+        for ov in angular_overlays[:2]:
+            convergences.append(f"ANGULAR OVERLAY — {ov}: a planet on the other's angle creates deep, fated-feeling activation of that life area.")
+
+    # Composite planets in angular houses (1, 4, 7, 10)
+    composite_angular = []
+    for planet in ["sun", "moon", "venus", "mars", "jupiter", "saturn"]:
+        p = composite.get(planet)
+        try:
+            if p and int(p.get("house", 0)) in angular_houses:
+                composite_angular.append(f"Composite {planet.title()} in House {p['house']}")
+        except (TypeError, ValueError):
+            pass
+    if composite_angular:
+        convergences.append(
+            f"COMPOSITE ANGULAR PLANETS — " + "; ".join(composite_angular)
+            + ". Planets in the composite chart's angular houses are the relationship's most visible and defining qualities."
+        )
+
+    return convergences
+
+
 def build_synastry_prompt(
     name_a: str, dob_a: str, loc_a: str, chart_a: dict,
     name_b: str, dob_b: str, loc_b: str, chart_b: dict,
@@ -986,10 +1127,20 @@ def build_synastry_prompt(
         + _format_composite(synastry.get("composite") or {}, synastry.get("composite_aspects") or [])
     )
 
+    syn_convergences = _compute_synastry_convergences(name_a, chart_a, name_b, chart_b, synastry)
+    syn_convergence_block = ""
+    if syn_convergences:
+        syn_convergence_block = (
+            "\n## ⚡ Synastry Convergence Intelligence (Pre-Computed — Highest Priority)\n"
+            "These patterns were detected before reading the data. Address each explicitly in the report:\n\n"
+            + "\n\n".join(f"▶ {c}" for c in syn_convergences)
+            + "\n"
+        )
+
     return f"""You are a master relationship astrologer writing a synastry compatibility reading for {name_a} and {name_b}.
 
 Use only the chart data provided. Do NOT invent aspects, placements, or positions not listed below.
-
+{syn_convergence_block}
 {section_a}
 
 {section_b}

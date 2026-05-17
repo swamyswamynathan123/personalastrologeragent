@@ -191,6 +191,10 @@ if "_synastry_prepared" not in st.session_state:
     st.session_state._synastry_prepared = None
 if "_stream_error" not in st.session_state:
     st.session_state._stream_error = None
+if "_chart_cache_key" not in st.session_state:
+    st.session_state._chart_cache_key = None
+if "_chart_cache_prepared" not in st.session_state:
+    st.session_state._chart_cache_prepared = None
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
@@ -279,37 +283,66 @@ if submitted:
     st.session_state._prepared_state = None
     st.session_state._stream_error = None
 
-    payload: AstrologerState = {
-        "full_name": full_name.strip() if full_name else None,
-        "dob": dob.strftime("%Y-%m-%d") if dob else None,
-        "birth_location": birth_location.strip() if birth_location else None,
-        "birth_time": birth_time.strftime("%H:%M") if birth_time else None,
-        "birth_time_timezone": birth_time_timezone,
-        "birth_time_confidence": birth_time_confidence,
-        "house_system": house_system,
-        "current_location": current_location.strip() if current_location else None,
-        "additional_info": additional_info.strip() if additional_info else None,
-        "report_focus": report_focus.strip() if report_focus else None,
-        "current_datetime": datetime.now(pytz.UTC).isoformat(),
-        "missing_fields": [],
-        "validation_errors": {},
-        "parsed_dob": None,
-        "parsed_birth_datetime": None,
-        "parsed_current_datetime": None,
-        "chart_data": None,
-        "follow_up_message": None,
-        "final_report": None,
-    }
+    # Cache key covers every field that affects chart computation
+    _today = datetime.now(pytz.UTC).date().isoformat()
+    _cache_key = (
+        (full_name or "").strip().lower(),
+        dob.strftime("%Y-%m-%d") if dob else None,
+        (birth_location or "").strip().lower(),
+        birth_time.strftime("%H:%M") if birth_time else None,
+        birth_time_timezone,
+        house_system,
+        (current_location or "").strip().lower(),
+        _today,
+    )
 
-    with st.spinner("Computing your chart... ✨"):
-        prepared = prepare_graph.invoke(payload)
-
-    if prepared.get("follow_up_message"):
-        st.session_state.validation_message = prepared["follow_up_message"]
-    elif prepared.get("parsed_birth_datetime"):
-        st.session_state._prepared_state = prepared
+    if (
+        _cache_key == st.session_state._chart_cache_key
+        and st.session_state._chart_cache_prepared is not None
+    ):
+        # Birth details unchanged — reuse cached chart, regenerate report only
+        _cached = st.session_state._chart_cache_prepared
+        st.session_state._prepared_state = {
+            **_cached,
+            "report_focus": report_focus.strip() if report_focus else None,
+            "additional_info": additional_info.strip() if additional_info else None,
+            "current_datetime": datetime.now(pytz.UTC).isoformat(),
+        }
+        st.info("Chart cached — regenerating report with updated focus/context.", icon="⚡")
     else:
-        st.session_state.validation_message = "__error__"
+        payload: AstrologerState = {
+            "full_name": full_name.strip() if full_name else None,
+            "dob": dob.strftime("%Y-%m-%d") if dob else None,
+            "birth_location": birth_location.strip() if birth_location else None,
+            "birth_time": birth_time.strftime("%H:%M") if birth_time else None,
+            "birth_time_timezone": birth_time_timezone,
+            "birth_time_confidence": birth_time_confidence,
+            "house_system": house_system,
+            "current_location": current_location.strip() if current_location else None,
+            "additional_info": additional_info.strip() if additional_info else None,
+            "report_focus": report_focus.strip() if report_focus else None,
+            "current_datetime": datetime.now(pytz.UTC).isoformat(),
+            "missing_fields": [],
+            "validation_errors": {},
+            "parsed_dob": None,
+            "parsed_birth_datetime": None,
+            "parsed_current_datetime": None,
+            "chart_data": None,
+            "follow_up_message": None,
+            "final_report": None,
+        }
+
+        with st.spinner("Computing your chart... ✨"):
+            prepared = prepare_graph.invoke(payload)
+
+        if prepared.get("follow_up_message"):
+            st.session_state.validation_message = prepared["follow_up_message"]
+        elif prepared.get("parsed_birth_datetime"):
+            st.session_state._prepared_state = prepared
+            st.session_state._chart_cache_key = _cache_key
+            st.session_state._chart_cache_prepared = prepared
+        else:
+            st.session_state.validation_message = "__error__"
 
 # ── Main area: output ─────────────────────────────────────────────────────────
 st.markdown("""
