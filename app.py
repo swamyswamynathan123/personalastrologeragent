@@ -289,6 +289,8 @@ if "_transit_calendar" not in st.session_state:
     st.session_state._transit_calendar = None
 if "_transit_calendar_key" not in st.session_state:
     st.session_state._transit_calendar_key = None
+if "_save_toast" not in st.session_state:
+    st.session_state._save_toast = None
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
@@ -495,6 +497,10 @@ st.markdown("""
   <p>A personalized natal chart reading powered by AI</p>
 </div>
 """, unsafe_allow_html=True)
+
+if st.session_state._save_toast:
+    st.success(st.session_state._save_toast)
+    st.session_state._save_toast = None
 
 natal_tab, calendar_tab, synastry_tab = st.tabs(["My Reading", "Transit Calendar", "Compatibility / Synastry"])
 
@@ -703,7 +709,8 @@ with natal_tab:
         with _save_col:
             if st.button("💾 Save Reading", key="save_natal", use_container_width=True):
                 save_natal(result)
-                st.success("Reading saved! Find it under **My Saved Charts** in the sidebar.")
+                st.session_state._save_toast = "Reading saved — find it under My Saved Charts in the sidebar."
+                st.rerun()
 
         # Follow-up chat
         st.divider()
@@ -1063,7 +1070,8 @@ with synastry_tab:
             with _syn_save_col:
                 if st.button("💾 Save Reading", key="save_synastry", use_container_width=True):
                     save_synastry(syn)
-                    st.success("Compatibility reading saved! Find it under **My Saved Charts** in the sidebar.")
+                    st.session_state._save_toast = "Compatibility reading saved — find it under My Saved Charts in the sidebar."
+                    st.rerun()
 
             # Synastry follow-up chat
             st.divider()
