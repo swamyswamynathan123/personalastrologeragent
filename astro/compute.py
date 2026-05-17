@@ -2361,10 +2361,16 @@ def generate_vedic_chart_svg(
 
         # Collect planet → sign index
         _PLANET_ATTRS = [
-            ("sun", "Su"), ("moon", "Mo"), ("mercury", "Me"),
-            ("venus", "Ve"), ("mars", "Ma"), ("jupiter", "Ju"),
-            ("saturn", "Sa"), ("uranus", "Ur"), ("neptune", "Ne"),
-            ("pluto", "Pl"),
+            ("sun",     "☉ Sun"),
+            ("moon",    "☽ Moon"),
+            ("mercury", "☿ Mercury"),
+            ("venus",   "♀ Venus"),
+            ("mars",    "♂ Mars"),
+            ("jupiter", "♃ Jupiter"),
+            ("saturn",  "♄ Saturn"),
+            ("uranus",  "♅ Uranus"),
+            ("neptune", "♆ Neptune"),
+            ("pluto",   "♇ Pluto"),
         ]
         sign_planets: dict[int, list[tuple[str, bool]]] = {i: [] for i in range(12)}
         for attr, label in _PLANET_ATTRS:
@@ -2379,8 +2385,8 @@ def generate_vedic_chart_svg(
         if rahu_p is not None:
             rahu_idx = _sign_to_idx(getattr(rahu_p, "sign", "Aries"))
             ketu_idx = (rahu_idx + 6) % 12
-            sign_planets[rahu_idx].append(("Ra", False))
-            sign_planets[ketu_idx].append(("Ke", False))
+            sign_planets[rahu_idx].append(("☊ Rahu", False))
+            sign_planets[ketu_idx].append(("☋ Ketu", False))
 
         # Ascendant sign index
         asc_house = getattr(subject, "first_house", None)
@@ -2423,8 +2429,8 @@ def generate_vedic_chart_svg(
         C_ASC   = "#c8a8f8"
         C_TITLE = "#d4bfff"
 
-        _OUTER = {"Ur", "Ne", "Pl"}
-        _NODES = {"Ra", "Ke"}
+        _OUTER = {"♅ Uranus", "♆ Neptune", "♇ Pluto"}
+        _NODES = {"☊ Rahu", "☋ Ketu"}
 
         total_h = GRID_Y + SIZE
         parts: list[str] = [
