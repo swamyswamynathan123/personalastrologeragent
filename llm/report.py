@@ -1750,6 +1750,7 @@ def generate_synastry_report(
     name_b: str, dob_b: str, loc_b: str, chart_b: dict,
     synastry: dict,
 ) -> str:
+    """Blocking three-pass synastry report: draft → structural review → factual grounding."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     prompt = build_synastry_prompt(name_a, dob_a, loc_a, chart_a, name_b, dob_b, loc_b, chart_b, synastry)
     response = client.chat.completions.create(
@@ -1761,7 +1762,9 @@ def generate_synastry_report(
             {"role": "user", "content": prompt},
         ],
     )
-    return response.choices[0].message.content
+    draft = response.choices[0].message.content or ""
+    reviewed = _review_synastry_report(draft, name_a, chart_a, name_b, chart_b, synastry)
+    return _ground_synastry_report(reviewed, name_a, chart_a, name_b, chart_b, synastry)
 
 
 def generate_synastry_report_stream(
@@ -1769,23 +1772,31 @@ def generate_synastry_report_stream(
     name_b: str, dob_b: str, loc_b: str, chart_b: dict,
     synastry: dict,
 ):
-    """Streaming variant — yields text chunks for use with st.write_stream()."""
+    """Three-pass synastry pipeline: draft → structural review → factual grounding → stream."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     prompt = build_synastry_prompt(name_a, dob_a, loc_a, chart_a, name_b, dob_b, loc_b, chart_b, synastry)
-    with client.chat.completions.create(
+
+    # Pass 1: generate draft
+    draft_resp = client.chat.completions.create(
         model="gpt-4o",
         max_tokens=3000,
         temperature=0.7,
-        stream=True,
         messages=[
             {"role": "system", "content": _SYNASTRY_SYSTEM},
             {"role": "user", "content": prompt},
         ],
-    ) as stream:
-        for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
+    )
+    draft = draft_resp.choices[0].message.content or ""
+
+    # Pass 2: structural review (convergences, dignity, Saturn framing, overlays)
+    reviewed = _review_synastry_report(draft, name_a, chart_a, name_b, chart_b, synastry)
+
+    # Pass 3: factual grounding (placement, cross-aspects, composite, house numbers)
+    final = _ground_synastry_report(reviewed, name_a, chart_a, name_b, chart_b, synastry)
+
+    # Stream the final verified text line by line
+    for line in final.split("\n"):
+        yield line + "\n"
 
 
 def answer_synastry_followup_stream(
@@ -2123,3 +2134,204 @@ def generate_report_stream(state: "AstrologerState"):
     # Stream the final verified text line by line
     for line in final.split("\n"):
         yield line + "\n"
+
+
+# ===========================================================================
+# Synastry three-pass pipeline helpers
+# ===========================================================================
+
+_SYNASTRY_REVIEW_SYSTEM = (
+    "You are a senior relationship astrology editor. Your only job is to correct specific technical "
+    "errors in a synastry reading. Be conservative — fix only genuine errors, never rewrite for style. "
+    "Preserve all headings, structure, section order, and approximate length."
+)
+
+
+def _build_synastry_review_prompt(
+    draft: str,
+    name_a: str, chart_a: dict,
+    name_b: str, chart_b: dict,
+    synastry: dict,
+) -> str:
+    convergences = _compute_synastry_convergences(name_a, chart_a, name_b, chart_b, synastry)
+    convergence_list = "\n".join(f"- {c}" for c in convergences) if convergences else "None detected."
+
+    composite = synastry.get("composite") or {}
+    dignity_lines = []
+    for key in ["sun", "moon", "venus", "mars", "saturn", "mercury", "jupiter"]:
+        d = composite.get(key)
+        if d and d.get("dignity") in ("detriment", "fall"):
+            dignity_lines.append(
+                f"- Composite {key.capitalize()}: {d['sign']} [{d['dignity']}]"
+            )
+    composite_dignity = "\n".join(dignity_lines) if dignity_lines else "None."
+
+    saturn_contacts = []
+    for a in (synastry.get("cross_aspects") or []):
+        if "saturn" in (a.get("planet_a", "") + a.get("planet_b", "")):
+            if a.get("aspect") in ("conjunction", "square", "opposition"):
+                pa = a["planet_a"].replace("_", " ").title()
+                pb = a["planet_b"].replace("_", " ").title()
+                saturn_contacts.append(
+                    f"- {name_a}'s {pa} {a['aspect']} {name_b}'s {pb} (orb {a['orb']}°)"
+                )
+    saturn_list = "\n".join(saturn_contacts) if saturn_contacts else "None."
+
+    return f"""Review the synastry reading below and fix ONLY these four specific errors if present:
+
+1. **CONVERGENCE NOT ADDRESSED** — One of the pre-computed synastry convergences below was not explicitly addressed in the reading. Integrate a clear interpretation of any unaddressed convergence into the most relevant section.
+
+2. **COMPOSITE DIGNITY ERROR** — A composite planet in detriment or fall is described as constructive or positive without naming the challenge it creates for the relationship. (See Composite Debilitated Planets below.)
+
+3. **SATURN FRAMING ERROR** — A challenging Saturn cross-aspect (conjunction, square, or opposition) is described as purely positive or entirely omitted. Saturn contacts must be named honestly — acknowledge both the stabilizing AND the restricting/challenging dimension.
+
+4. **HOUSE OVERLAY UNSUPPORTED CLAIM** — A statement about what this relationship brings to a specific area of one person's life (career, home, finances, spirituality, etc.) makes no reference to the house overlay data. Either cite the relevant overlay or remove the unsupported life-area claim.
+
+## Reference: Pre-Computed Convergences (all must be addressed)
+{convergence_list}
+
+## Reference: Composite Debilitated Planets
+{composite_dignity}
+
+## Reference: Challenging Saturn Cross-Aspects
+{saturn_list}
+
+## Reading to Review and Correct
+{draft}
+
+Output the COMPLETE corrected reading. Make only the minimum edits required to fix genuine errors. If no errors are found, reproduce the reading exactly."""
+
+
+def _review_synastry_report(
+    draft: str,
+    name_a: str, chart_a: dict,
+    name_b: str, chart_b: dict,
+    synastry: dict,
+) -> str:
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=3500,
+        temperature=0.3,
+        messages=[
+            {"role": "system", "content": _SYNASTRY_REVIEW_SYSTEM},
+            {"role": "user", "content": _build_synastry_review_prompt(
+                draft, name_a, chart_a, name_b, chart_b, synastry
+            )},
+        ],
+    )
+    return response.choices[0].message.content or draft
+
+
+def _build_synastry_fact_sheet(
+    name_a: str, chart_a: dict,
+    name_b: str, chart_b: dict,
+    synastry: dict,
+) -> str:
+    """Compact ground-truth reference for synastry factual grounding."""
+    lines: list[str] = ["## Ground-Truth Synastry Facts"]
+
+    key = ["sun", "moon", "ascendant", "venus", "mars", "mercury", "jupiter", "saturn"]
+    lines.append(f"\n### {name_a}'s Key Placements")
+    for p in key:
+        d = chart_a.get(p)
+        if d:
+            retro = " Rx" if d.get("retrograde") else ""
+            house = f", H{d['house']}" if d.get("house") else ""
+            lines.append(f"- {p.capitalize()}: {d['sign']} {d.get('position', '?')}°{retro}{house}")
+
+    lines.append(f"\n### {name_b}'s Key Placements")
+    for p in key:
+        d = chart_b.get(p)
+        if d:
+            retro = " Rx" if d.get("retrograde") else ""
+            house = f", H{d['house']}" if d.get("house") else ""
+            lines.append(f"- {p.capitalize()}: {d['sign']} {d.get('position', '?')}°{retro}{house}")
+
+    cross = synastry.get("cross_aspects") or []
+    if cross:
+        lines.append("\n### Inter-Chart Aspects")
+        for a in cross[:25]:
+            pa = a["planet_a"].replace("_", " ").title()
+            pb = a["planet_b"].replace("_", " ").title()
+            lines.append(f"- {name_a}'s {pa} {a['aspect']} {name_b}'s {pb} (orb {a['orb']}°)")
+
+    overlays_ba = synastry.get("house_overlays_b_in_a") or []
+    if overlays_ba:
+        lines.append(f"\n### {name_b}'s Planets in {name_a}'s Houses")
+        for o in overlays_ba[:10]:
+            lines.append(
+                f"- {name_b}'s {o['planet'].capitalize()} ({o['sign']}) in {name_a}'s House {o['house_in_partner']}"
+            )
+
+    overlays_ab = synastry.get("house_overlays_a_in_b") or []
+    if overlays_ab:
+        lines.append(f"\n### {name_a}'s Planets in {name_b}'s Houses")
+        for o in overlays_ab[:10]:
+            lines.append(
+                f"- {name_a}'s {o['planet'].capitalize()} ({o['sign']}) in {name_b}'s House {o['house_in_partner']}"
+            )
+
+    composite = synastry.get("composite") or {}
+    if composite:
+        lines.append("\n### Composite Chart Placements")
+        for p in ["sun", "moon", "ascendant", "midheaven", "venus", "mars", "saturn"]:
+            d = composite.get(p)
+            if d:
+                house = f", H{d['house']}" if d.get("house") else ""
+                lines.append(f"- Composite {p.capitalize()}: {d['sign']} {d.get('position', '?')}°{house}")
+
+    return "\n".join(lines)
+
+
+def _build_synastry_grounding_prompt(
+    report: str,
+    name_a: str, chart_a: dict,
+    name_b: str, chart_b: dict,
+    synastry: dict,
+) -> str:
+    fact_sheet = _build_synastry_fact_sheet(name_a, chart_a, name_b, chart_b, synastry)
+    return f"""Verify the synastry reading below against the ground-truth chart data.
+
+{fact_sheet}
+
+## Reading to Verify
+{report}
+
+## Verification Instructions
+
+Check ONLY these four types of factual errors:
+
+1. **PLACEMENT ERROR** — The report states a planet is in a sign or house for either person that contradicts the Key Placements data above.
+
+2. **INVENTED CROSS-ASPECT** — The report describes an inter-chart aspect (e.g., "{name_a}'s Venus trines {name_b}'s Moon") that does not appear in the Inter-Chart Aspects data above.
+
+3. **COMPOSITE ERROR** — The report states a composite planet is in a sign or house that contradicts the Composite Chart Placements data above.
+
+4. **HOUSE NUMBER ERROR** — The report names a specific house number for a planet overlay (e.g., "{name_b}'s Sun falls in {name_a}'s 7th house") that contradicts the House Overlays data above.
+
+Make only the minimum edits required to fix genuine errors. Do not rewrite for style, completeness, or interpretation. If no factual errors are found, reproduce the reading exactly."""
+
+
+def _ground_synastry_report(
+    report: str,
+    name_a: str, chart_a: dict,
+    name_b: str, chart_b: dict,
+    synastry: dict,
+) -> str:
+    """Factual grounding pass for synastry — skipped if chart data is absent."""
+    if not synastry:
+        return report
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=3500,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": _GROUNDING_SYSTEM},
+            {"role": "user", "content": _build_synastry_grounding_prompt(
+                report, name_a, chart_a, name_b, chart_b, synastry
+            )},
+        ],
+    )
+    return response.choices[0].message.content or report

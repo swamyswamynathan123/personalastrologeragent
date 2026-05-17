@@ -763,6 +763,7 @@ with synastry_tab:
                 st.caption(f"{prep['dob_b']} · {prep['loc_b']}")
             st.divider()
 
+            st.caption("✨ Drafting your compatibility reading (pass 1) → reviewing for accuracy (pass 2) → verifying facts against both charts (pass 3) — this takes ~30 seconds...")
             syn_report_text = st.write_stream(generate_synastry_report_stream(
                 name_a=prep["name_a"], dob_a=prep["dob_a"], loc_a=prep["loc_a"], chart_a=prep["chart_a"],
                 name_b=prep["name_b"], dob_b=prep["dob_b"], loc_b=prep["loc_b"], chart_b=prep["chart_b"],
