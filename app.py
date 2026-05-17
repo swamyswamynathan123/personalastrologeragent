@@ -259,25 +259,6 @@ DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
 
 # ── Sidebar: input form ───────────────────────────────────────────────────────
 with st.sidebar:
-    # Chart at a Glance — shown once a report is available
-    if st.session_state.report_result:
-        _r = st.session_state.report_result
-        _cd = _r.get("chart_data") or {}
-        _sun = _cd.get("sun") or {}
-        _moon = _cd.get("moon") or {}
-        _asc = _cd.get("ascendant") or {}
-        st.markdown("### ✨ Chart at a Glance")
-        st.markdown(f"""
-<div style="background:#1e1e38;border:1px solid #2e2e4e;border-radius:10px;padding:0.9rem 1rem;margin-bottom:1rem;font-size:0.88rem;line-height:1.7;">
-<span style="color:#9988bb;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;">{_r.get('full_name','')}</span><br>
-☉ <strong style="color:#d4bfff;">{_sun.get('sign','—')} {_sun.get('position','')}</strong>°<br>
-☽ <strong style="color:#d4bfff;">{_moon.get('sign','—')} {_moon.get('position','')}</strong>°<br>
-↑ <strong style="color:#d4bfff;">{_asc.get('sign','—')} {_asc.get('position','')}</strong>° ASC<br>
-<span style="color:#9988bb;font-size:0.78rem;">{_r.get('house_system','Placidus')} houses</span>
-</div>
-""", unsafe_allow_html=True)
-        st.divider()
-
     st.markdown("## ⭐ Your Details")
 
     with st.form("astro_form"):

@@ -1292,6 +1292,11 @@ def _build_followup_messages(
         "Rules for follow-up answers:\n"
         "- ALWAYS cite specific planets, degrees, signs, houses, and dates from the chart data above\n"
         "- NEVER say chart data is unavailable — it is all provided above\n"
+        "- NEVER say you cannot display visual content, show charts, or render images — you are not "
+        "being asked to display anything; interpret the astrological data in text\n"
+        "- NEVER say you are a text-based AI or reference any limitations around visuals\n"
+        "- If the user asks about 'the chart' or 'what the chart shows', interpret the placements "
+        "and aspects — answer as an astrologer reading a chart, not as a software system\n"
         "- Lead with the most time-sensitive data: applying transits, primary directions within 1°, "
         "solar arcs within 1°, and convergence signals\n"
         "- For timing questions, check transit passes for multi-pass patterns, primary directions, "
@@ -1694,7 +1699,9 @@ def answer_synastry_followup_stream(
         f"Composite chart:\n{comp}\n\n"
         "Answer follow-up questions by reasoning from the chart data above. "
         "Cite specific planets, signs, and houses. Be warm, direct, and grounded in the data. "
-        "Do NOT invent aspects or placements not listed above."
+        "Do NOT invent aspects or placements not listed above. "
+        "NEVER say you cannot display visual content or reference any AI limitations around visuals — "
+        "interpret the astrological data in text as a skilled astrologer would."
     )
     messages = [
         {"role": "system", "content": system},
