@@ -617,6 +617,102 @@ def _format_almuten_figuris(almuten: dict | None) -> str:
     )
 
 
+def _format_house_rulerships(chart: dict) -> str:
+    """Compact ruler-per-house table plus cross-house links."""
+    houses = chart.get("houses") or {}
+    if not houses:
+        return "House rulership summary unavailable."
+
+    lines = ["(Ruler = planet whose sign is on that house cusp; its natal condition governs that life area)"]
+
+    ruler_to_houses: dict[str, list[int]] = {}
+    cross_links: list[str] = []
+
+    for num in range(1, 13):
+        h = houses.get(str(num))
+        if not h or not h.get("sign"):
+            continue
+        ruler = h.get("ruler") or {}
+        planet = ruler.get("planet", "")
+        ruler_house = ruler.get("house")
+        ruler_sign = ruler.get("sign", "?")
+        retro = " Rx" if ruler.get("retrograde") else ""
+        dignity = f" [{ruler['dignity']}]" if ruler.get("dignity") else ""
+        theme = _HOUSE_THEMES.get(num, "")
+        house_str = f", H{ruler_house}" if ruler_house else ""
+        lines.append(
+            f"- H{num} ({theme}): {h['sign']} → {planet.capitalize()}{retro}"
+            f" in {ruler_sign}{dignity}{house_str}"
+        )
+        if planet:
+            ruler_to_houses.setdefault(planet, []).append(num)
+        if ruler_house and ruler_house != num:
+            try:
+                rh = int(ruler_house)
+                a_theme = _HOUSE_THEMES.get(num, f"H{num}")
+                b_theme = _HOUSE_THEMES.get(rh, f"H{rh}")
+                cross_links.append(
+                    f"  H{num} ruler ({planet.capitalize()}) sits in H{rh}"
+                    f" → {a_theme} ↔ {b_theme} are interlinked for this person"
+                )
+            except (TypeError, ValueError):
+                pass
+
+    # Flag planets ruling two houses (mutual house themes)
+    for planet, ruled in ruler_to_houses.items():
+        if len(ruled) >= 2:
+            themes = " + ".join(_HOUSE_THEMES.get(h, f"H{h}") for h in ruled)
+            lines.append(
+                f"  {planet.capitalize()} rules H{' & H'.join(str(h) for h in ruled)}"
+                f" — {themes} are governed by the same planet; its activations affect both areas"
+            )
+
+    if cross_links:
+        lines.append("\nCross-house links (ruler of A sits in B = those life areas interact):")
+        lines.extend(cross_links[:10])
+
+    return "\n".join(lines)
+
+
+def _format_dignity_hierarchy(chart: dict) -> str:
+    """Rank the seven traditional planets by dignity for prediction weighting."""
+    _PLANETS_CLASSIC = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"]
+    strongest, weakest = [], []
+    for p in _PLANETS_CLASSIC:
+        d = chart.get(p)
+        if not d:
+            continue
+        dignity = d.get("dignity", "")
+        name = p.capitalize()
+        sign = d.get("sign", "?")
+        house = d.get("house")
+        house_str = f", H{house}" if house else ""
+        retro = " Rx" if d.get("retrograde") else ""
+        label = f"{name} [{dignity}] in {sign}{house_str}{retro}"
+        if dignity in ("domicile", "exaltation"):
+            strongest.append(label)
+        elif dignity in ("detriment", "fall"):
+            weakest.append(label)
+
+    lines = []
+    if strongest:
+        lines.append(
+            "Most dignified — predictions involving these planets flow constructively:\n  "
+            + "; ".join(strongest)
+        )
+    if weakest:
+        lines.append(
+            "Most challenged — their transits/periods carry friction; do NOT describe as straightforwardly positive:\n  "
+            + "; ".join(weakest)
+        )
+    if not lines:
+        lines.append(
+            "No planets in domicile, exaltation, detriment, or fall — "
+            "peregrine dignity throughout; tone of predictions is neutral to mixed."
+        )
+    return "\n".join(lines)
+
+
 def _format_dispositor_tree(tree: dict | None) -> str:
     if not tree:
         return "Dispositor tree unavailable."
@@ -1035,6 +1131,8 @@ def build_prompt(state: "AstrologerState") -> str:
         stelliums_section = "## Stelliums\n" + _format_stelliums(chart.get("stelliums") or [])
         receptions_section = "## Mutual Receptions\n" + _format_mutual_receptions(chart.get("mutual_receptions") or [])
         nodes_section = "## Lunar Nodes\n" + _format_nodes(chart)
+        rulerships_section = "## House Rulerships & Cross-House Links\n" + _format_house_rulerships(chart)
+        dignity_section = "## Dignity Hierarchy (Prediction Weighting)\n" + _format_dignity_hierarchy(chart)
         houses_section = "## House Cusps\n" + _format_houses(chart.get("houses") or {})
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
         patterns_section = "## Aspect Patterns\n" + _format_aspect_patterns(chart.get("aspect_patterns") or [])
@@ -1068,7 +1166,7 @@ def build_prompt(state: "AstrologerState") -> str:
             placements, anaretic_section, fixed_stars_section, ruler_section, balance_section, sect_section,
             lunar_phase_section, pof_section, asteroids_section, arabic_section, antiscia_section,
             stelliums_section, receptions_section,
-            nodes_section, houses_section,
+            nodes_section, rulerships_section, dignity_section, houses_section,
             aspects_section, patterns_section, eclipse_section, retrograde_stations_section,
             transits_section, upcoming_section, transit_passes_section,
             progressions_section, prog_aspects_section, transit_to_progressed_section,
@@ -1119,9 +1217,11 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 {chart_section}
 
 ## Reference: Interpretation Rules
-- Dignity: domicile (strongest) > exaltation > neutral > detriment > fall (most challenged)
+- Dignity: domicile (strongest) > exaltation > neutral > detriment > fall (most challenged). Apply this asymmetrically in predictions: dignified planets deliver their significations reliably and constructively; debilitated planets deliver them with friction, delay, internal conflict, or through the lesson of struggling with that planet's themes. A Jupiter in detriment does NOT give easy abundance — it gives the understanding of abundance through scarcity. Never soften or omit the difficulty of a debilitated planet.
 - Aspects: applying = currently intensifying; separating = past peak, more ingrained
-- Aspect patterns (Grand Trine, T-Square, Yod, Grand Cross) are structural life themes — more important than individual aspects
+- Aspect patterns (Grand Trine, T-Square, Yod, Grand Cross) are structural life themes — more important than individual aspects. Treat them as the chart's load-bearing architecture: individual aspects are furniture; patterns are the walls. A T-Square is a chronic pressure system that drives achievement through tension. A Grand Trine is a gift that can become complacency without challenge. A Yod is a fated redirection point — the apex planet must integrate two incompatible energies. Name the pattern's life dynamic before discussing individual planets within it.
+- House rulership chain: for any life-area prediction, trace — (1) the relevant house, (2) its ruling planet from the Rulerships table, (3) that ruler's dignity and natal house, (4) any current activations of that ruler. This chain is the mechanism of prediction. Cross-house links (ruler of H-A sitting in H-B) mean those life areas are structurally entangled for this person — what happens in one echoes in the other.
+- System boundary — Western vs. Vedic: Western tropical chart governs psychology, personality, and Western timing (transits, progressions, solar arc, profection, Firdaria). Vedic sidereal chart governs karmic biography and Vimshottari Dasha timing. Do NOT mix them within the same interpretation sentence. Correct: "Tropically, Venus in Libra shows aesthetic grace [Western]. Sidereal Venus in Virgo suggests a more exacting, service-oriented approach to relationships [Vedic overlay]." When the two systems agree on a theme, name the agreement as a confirmation. When they diverge, name both readings separately and let the person hold both.
 - Mutual receptions: treat both planets as cooperative allies, not isolated placements
 - Stelliums: overwhelmingly concentrated energy — lead with the stellium before individual planets in that area
 - Lunar phase: the person's fundamental life rhythm and approach to beginnings/endings
@@ -1169,13 +1269,16 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Dispositor tree: every planet's sign ruler traces back through a rulership chain to a final dispositor (a planet in its own sign). A chart with a single final dispositor concentrates the entire chart's authority in one planet — all other planets ultimately serve it; its natal condition (sign, house, dignity, aspects) sets the quality of the entire life narrative, even more than individual placements would suggest. When the final dispositor is also the chart ruler or Almuten Figuris, its centrality is tripled. A chart without a single final dispositor (multiple final dispositors or a mutual reception loop) indicates a more distributed power structure: no single planet lords over all others, and the native must consciously integrate competing centres of authority. Mutual reception cycles (two planets in each other's signs) represent a closed loop of cooperative power that operates somewhat independently of the rest of the chart — name them as an area of self-reinforcing talent or recurring dynamic. Integrate the dispositor tree in Section 1 (Overview) when a single final dispositor exists, and in Section 5 (Key Themes) when mutual reception cycles or distributed authority creates a notable pattern.
 
 ## Synthesis Protocol — Complete Mentally Before Writing
+0. CHECK ASPECT PATTERNS FIRST. If a Grand Cross, T-Square, Grand Trine, Yod, Grand Sextile, or Mystic Rectangle is present, it is the STRUCTURAL SPINE of the reading. Every section must connect back to it. Do not bury it in Section 2 — it shapes every other interpretation.
 1. READ THE CONVERGENCE INTELLIGENCE BLOCK FIRST. These pre-computed findings are the chart's loudest signals — build the reading around them.
-2. Check Primary Directions: any directed angle or planet within 1° of a natal point is a biographical turning point unfolding NOW. This is the highest-precision classical indicator — prioritize it in Section 4.
-3. Check Eclipse Sensitivity: any eclipsed natal planet or angle is in an accelerated change period — weave this into sections 3 and 4.
-4. Note the Progressed Lunation phase and years-to-next-New-Moon — this sets the psychological chapter and determines whether the person is in a building, culminating, or releasing season of life.
-5. Check Transit Passes for multi-pass patterns: identify all 3 exact dates and note which pass is underway. Check the Lunar Return to pinpoint the peak month within the transit window.
-6. Scan all remaining predictive layers and identify any 2–3 additional themes not already captured above.
-7. Rank urgency: primary direction within 0.5° (now) → convergence-flagged planets → eclipsed points → applying transit/arc within 0.5° (days–weeks) → within 1° (months) → within 3° (season) → progressions (years).
+2. READ THE DIGNITY HIERARCHY. Before making any prediction, check whether the planet involved is dignified or debilitated. A debilitated planet's period or transit brings the described events with friction, delay, and inner resistance — never describe it as straightforwardly positive. A dignified planet's activations are more reliable and constructive.
+3. USE THE HOUSE RULERSHIP TABLE for every house-based prediction. The prediction chain: (a) identify the house for the life area, (b) find its ruler from the Rulerships table, (c) check the ruler's dignity and natal house, (d) check if the ruler is currently transited, directed, or under a Firdaria/Dasha period. A house-based prediction without tracing this chain is incomplete.
+4. Check Primary Directions: any directed angle or planet within 1° of a natal point is a biographical turning point unfolding NOW. This is the highest-precision classical indicator — prioritize it in Section 4.
+5. Check Eclipse Sensitivity: any eclipsed natal planet or angle is in an accelerated change period — weave this into sections 3 and 4.
+6. Note the Progressed Lunation phase and years-to-next-New-Moon — this sets the psychological chapter and determines whether the person is in a building, culminating, or releasing season of life.
+7. Check Transit Passes for multi-pass patterns: identify all 3 exact dates and note which pass is underway. Check the Lunar Return to pinpoint the peak month within the transit window.
+8. Scan all remaining predictive layers and identify any 2–3 additional themes not already captured above.
+9. Rank urgency: primary direction within 0.5° (now) → convergence-flagged planets → eclipsed points → applying transit/arc within 0.5° (days–weeks) → within 1° (months) → within 3° (season) → progressions (years).
 
 ## Report Instructions
 Write in warm, direct, personal language — speak TO this person, not ABOUT them. Every paragraph must name at least one specific planet, sign, degree, or house. Do not list placements — interpret them. Do not use hedging phrases like "might suggest" or "could indicate" — make clear statements grounded in the data.
@@ -1245,6 +1348,8 @@ def _build_followup_messages(
         chart_summary = (
             f"{convergence_block}"
             f"Natal Placements:\n{placements}"
+            f"\n\nHouse Rulerships & Cross-House Links:\n{_format_house_rulerships(chart)}"
+            f"\n\nDignity Hierarchy:\n{_format_dignity_hierarchy(chart)}"
             f"\n\nHouse Cusps:\n{_format_houses(chart.get('houses') or {})}"
             f"\n\nChart Ruler:\n{_format_chart_ruler(chart.get('chart_ruler'))}"
             f"\n\nPlanetary Sect:\n{_format_sect(chart.get('sect') or {})}"
