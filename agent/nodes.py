@@ -121,6 +121,9 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_eclipse_sensitivity,
             compute_retrograde_stations,
             compute_transit_to_progressed,
+            compute_primary_directions,
+            compute_lunar_return,
+            compute_transit_passes,
             generate_chart_svg, generate_transit_svg,
         )
 
@@ -334,6 +337,43 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["transit_svg"] = ""
+
+        try:
+            chart["primary_directions"] = compute_primary_directions(
+                natal_chart=chart,
+                birth_year=birth_dt.year, birth_month=birth_dt.month, birth_day=birth_dt.day,
+                birth_hour=birth_dt.hour, birth_minute=birth_dt.minute,
+                current_year=current_dt.year, current_month=current_dt.month,
+                current_day=current_dt.day,
+                tz_str=state.get("birth_time_timezone") or "UTC",
+            )
+        except Exception:
+            chart["primary_directions"] = []
+
+        try:
+            current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+            current_parts = [p.strip() for p in state["current_location"].split(",")]
+            chart["lunar_return"] = compute_lunar_return(
+                natal_chart=chart,
+                current_year=current_dt.year, current_month=current_dt.month,
+                current_day=current_dt.day, current_hour=current_dt.hour,
+                current_minute=current_dt.minute,
+                city=current_parts[0],
+                nation=current_parts[-1] if len(current_parts) > 1 else "",
+            )
+        except Exception:
+            chart["lunar_return"] = {}
+
+        try:
+            current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+            chart["transit_passes"] = compute_transit_passes(
+                natal_chart=chart,
+                current_year=current_dt.year, current_month=current_dt.month,
+                current_day=current_dt.day, current_hour=current_dt.hour,
+                current_minute=current_dt.minute,
+            )
+        except Exception:
+            chart["transit_passes"] = []
 
         return {"chart_data": chart}
     except Exception:

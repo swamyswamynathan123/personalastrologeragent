@@ -514,6 +514,81 @@ def _format_transit_to_progressed(aspects: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_primary_directions(directions: list[dict]) -> str:
+    if not directions:
+        return "No primary directions within 1° orb at this age (Naibod rate, 1° ARMC ≈ 1 year)."
+    lines = []
+    for d in directions:
+        dp = d["directed_point"]
+        np_ = d["natal_point"].replace("_", " ").title()
+        sign = d.get("directed_sign", "?")
+        pos = d.get("directed_pos", "?")
+        lines.append(
+            f"- {dp} ({sign} {pos}°) {d['aspect']} natal {np_} (orb {d['orb']}°)"
+        )
+    return "\n".join(lines)
+
+
+def _format_lunar_return(lr: dict) -> str:
+    if not lr:
+        return "Lunar return chart unavailable."
+    lines = [
+        f"(Next lunar return: {lr.get('return_date', '?')} at {lr.get('return_time', '?')} — "
+        f"Moon returns to natal degree; cast at current location)"
+    ]
+    asc = lr.get("ascendant")
+    mc = lr.get("midheaven")
+    moon = lr.get("moon")
+    if asc:
+        lines.append(f"- LR Ascendant: {asc['sign']} {asc['position']}° — the month's energy filter and self-presentation")
+    if mc:
+        lines.append(f"- LR Midheaven: {mc['sign']} {mc['position']}° — the month's career/public focus")
+    if moon:
+        house = f", LR House {moon['house']}" if moon.get("house") else ""
+        lines.append(f"- LR Moon: {moon['sign']} {moon['position']}°{house} — emotional center of the month")
+    angular = lr.get("angular_planets") or []
+    if angular:
+        ang_str = "; ".join(
+            f"{a['planet'].capitalize()} conjunct LR {a['angle'].replace('_', ' ').title()} (orb {a['orb']}°)"
+            for a in angular
+        )
+        lines.append(f"- Angular planets (dominant this month): {ang_str}")
+    stellia = lr.get("stellia") or {}
+    for house_str, planets in stellia.items():
+        theme = _HOUSE_THEMES.get(int(house_str), f"House {house_str}")
+        lines.append(
+            f"- LR House {house_str} ({theme}) occupied by {', '.join(planets)} — concentrated monthly focus"
+        )
+    return "\n".join(lines)
+
+
+def _format_transit_passes(passes: list[dict]) -> str:
+    if not passes:
+        return "No outer-planet transits within 0.5° orb over the next 12 months."
+    lines = []
+    for p in passes:
+        tp = p["transiting_planet"].capitalize()
+        np_ = p["natal_planet"].replace("_", " ").title()
+        pass_list = p.get("passes") or []
+        if not pass_list:
+            continue
+        if p.get("multi_pass"):
+            pass_strs = []
+            for ps in pass_list:
+                retro = " (Rx)" if ps.get("retrograde") else " (Direct)"
+                pass_strs.append(f"{ps['date']}{retro} orb {ps['orb']}°")
+            lines.append(
+                f"- {tp} {p['aspect']} natal {np_} — **{len(pass_list)} passes**: {' → '.join(pass_strs)}"
+            )
+        else:
+            ps = pass_list[0]
+            retro = " (Rx)" if ps.get("retrograde") else ""
+            lines.append(
+                f"- {tp}{retro} {p['aspect']} natal {np_} — exact ~{ps['date']} (orb {ps['orb']}°)"
+            )
+    return "\n".join(lines) if lines else "No outer-planet transits within 0.5° orb over the next 12 months."
+
+
 def _compute_convergences(chart: dict, state: "AstrologerState") -> list[str]:
     """Detect the same planet activated across multiple timing systems."""
     convergences = []
@@ -807,6 +882,9 @@ def build_prompt(state: "AstrologerState") -> str:
         retrograde_stations_section = "## Retrograde Stations (±180 days, 3° orb of natal)\n" + _format_retrograde_stations(chart.get("retrograde_stations") or [])
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
         upcoming_section = "## Upcoming Transits (next 90 days — outer planets only)\n" + _format_upcoming_transits(chart.get("upcoming_transits") or [])
+        transit_passes_section = "## Transit Passes — Full 12-Month Pattern (0.5° exact orb, outer planets)\n" + _format_transit_passes(chart.get("transit_passes") or [])
+        primary_directions_section = "## Primary Directions (Naibod arc, 1° orb)\n" + _format_primary_directions(chart.get("primary_directions") or [])
+        lunar_return_section = "## Lunar Return (next ~27-day cycle)\n" + _format_lunar_return(chart.get("lunar_return") or {})
         progressions_section = "## Secondary Progressions\n" + _format_progressions(chart.get("progressions"))
         prog_aspects_section = "## Progressed Aspects to Natal Chart\n" + _format_progressed_aspects(chart.get("progressed_aspects") or [])
         transit_to_progressed_section = "## Outer Planet Transits to Progressed Positions\n" + _format_transit_to_progressed(chart.get("transit_to_progressed") or [])
@@ -822,10 +900,10 @@ def build_prompt(state: "AstrologerState") -> str:
             stelliums_section, receptions_section,
             nodes_section, houses_section,
             aspects_section, patterns_section, eclipse_section, retrograde_stations_section,
-            transits_section, upcoming_section,
+            transits_section, upcoming_section, transit_passes_section,
             progressions_section, prog_aspects_section, transit_to_progressed_section,
-            solar_arcs_section, solar_arc_aspects_section,
-            profection_section, firdaria_section, solar_return_section, vedic_section,
+            solar_arcs_section, solar_arc_aspects_section, primary_directions_section,
+            profection_section, firdaria_section, solar_return_section, lunar_return_section, vedic_section,
         ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
@@ -900,6 +978,9 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Vimshottari Dasha: the Mahadasha (major period, 6–20 years) sets the biographical backdrop; the Antardasha (sub-period, months to years) is the current texture within it. If the Mahadasha lord is the same as the Firdaria major lord, this is a profound convergence across both traditions — name it explicitly as the chart's single most dominant current theme. If the Dasha lord is also the profection lord of the year, all three timing systems point to the same planet — this is exceptional and must be flagged.
 - Vedic Yogas: Pancha Mahapurusha yogas (Ruchaka/Bhadra/Hamsa/Malavya/Shasha) are among the most powerful signatures in Jyotish — a planet in its own sign or exaltation in an angular house (Kendra) creates exceptional talent in that planet's domain; integrate this with the Western chart's dominant planets and aspect patterns. Gajakesari Yoga (Jupiter in Kendra from Moon) is one of the most auspicious and common yogas — name it as a source of resilience and wisdom. Raj Yogas (Kendra-Trikona lord links) indicate potential for authority and worldly success; Parivartana Raj Yoga (sign exchange) is particularly potent. Neecha Bhanga Raj Yoga (cancelled debilitation) is a life-transforming signature — the early struggle described by the debilitation becomes the very source of exceptional strength. Dhana Yogas indicate financial capacity. Multiple yogas in the same chart compound each other. Name any yogas in Section 1 (Overview) if they involve the Sun, Moon, or Ascendant lord, or in Section 5 (Key Themes) if they involve other planets.
 - Eclipse sensitivity: when a natal planet or angle is within 3° of a recent or upcoming eclipse, that planet/angle is eclipsed — its themes are both activated and destabilized for 6–12 months around the eclipse. A solar eclipse conjunct a natal planet = a reset and new chapter in that planet's domain; a lunar eclipse = an emotional culmination or release. Eclipse contacts to the ASC, MC, Sun, or Moon are life-level events. If multiple natal points are eclipsed simultaneously, the chart is in a period of accelerated change.
+- Primary directions (Naibod arc): the classical Ptolemaic timing method — 1° of ARMC advance per year of life (Naibod rate: 0.9856472°/year). Directed Ascendant or Midheaven aspecting a natal planet marks a biographical turning point: identity redefinition (directed ASC), career/authority shift (directed MC), or the natal planet's themes crystallizing externally. A directed planet reaching the natal ASC or MC brings that planet's energy into the foreground of life. Conjunction and opposition are strongest; squares also significant. Within 0.5° = the event is imminent or unfolding now; between 0.5°–1.0° = within about 6 months. Always prioritize directions to/from natal luminaries and angles. If a primary direction coincides with a current transit or solar arc, the biographical significance is doubled.
+- Lunar return: monthly precision layer — the LR Ascendant filters the month's energy; any angular planets in the LR chart (within 5° of LR ASC or MC) dominate that month. LR Moon's house shows where emotional focus is concentrated. Use the lunar return to pinpoint WHEN within a year a transit or arc most concretely manifests — if a transit is active AND the LR Moon is in the same house as the transit's natal point, that month is the peak. Mention specific LR timing in Section 6 (Practical Guidance).
+- Transit passes (multi-pass pattern): when an outer planet retrogrades while aspecting a natal point, the aspect recurs 2–3 times over several months. First direct pass = theme enters awareness; retrograde pass = deepest internal processing (often most intense); final direct pass = integration and externalization. Give all dates when multi-pass is present. Name each pass's quality in Section 6.
 - Retrograde stations: a planet stationing (changing direction) within 3° of a natal point is not a brief transit — it will hold contact for weeks or months, making its activation far more potent than a standard transit pass. A direct station = the planet's themes are culminating and externalizing; a retrograde station = the themes are being internalized, reviewed, or reconsidered. An outer planet (especially Saturn or Pluto) stationing on a natal angle (ASC/MC) or luminary is a major biographical turning point. Name any station within 30 days (past or future) in Section 4.
 - Transit-to-progressed: outer planets transiting progressed planetary positions represent a distinct third timing layer. The progressed chart reflects the evolved psychological self, so transits to progressed positions activate themes of the person's current chapter, not just their natal baseline. The progressed Moon is especially sensitive: outer planet aspects to the progressed Moon correlate with emotional turning points that complement but differ from the natal Moon transits. If an outer planet hits the same point in both the natal and progressed chart, the activation is doubled — name this explicitly.
 - Progressed lunation cycle: the angle of the Progressed Moon ahead of the Progressed Sun reveals the psychological phase the person is living in. New Moon phase = a beginning, planting seeds with little visibility; Crescent = effort and resistance; First Quarter = crisis of action; Gibbous = refinement and preparation; Full Moon = culmination, revelation, visibility; Disseminating = sharing and teaching; Last Quarter = crisis of consciousness, questioning structures; Balsamic = release, completion, preparing for a new cycle. The "years to next Progressed New Moon" is a countdown to the next major psychological reset — if under 3 years, the current cycle is ending and new seeds are forming.
@@ -907,10 +988,12 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 
 ## Synthesis Protocol — Complete Mentally Before Writing
 1. READ THE CONVERGENCE INTELLIGENCE BLOCK FIRST. These pre-computed findings are the chart's loudest signals — build the reading around them.
-2. Check Eclipse Sensitivity: any eclipsed natal planet or angle is in an accelerated change period — weave this into sections 3 and 4.
-3. Note the Progressed Lunation phase and years-to-next-New-Moon — this sets the psychological chapter and determines whether the person is in a building, culminating, or releasing season of life.
-4. Scan all remaining predictive layers and identify any 2–3 additional themes not already captured by the convergences.
-5. Rank urgency: convergence-flagged planets (highest) → eclipsed points → applying transit/arc within 0.5° (days–weeks) → within 1° (months) → within 3° (season) → progressions (years).
+2. Check Primary Directions: any directed angle or planet within 1° of a natal point is a biographical turning point unfolding NOW. This is the highest-precision classical indicator — prioritize it in Section 4.
+3. Check Eclipse Sensitivity: any eclipsed natal planet or angle is in an accelerated change period — weave this into sections 3 and 4.
+4. Note the Progressed Lunation phase and years-to-next-New-Moon — this sets the psychological chapter and determines whether the person is in a building, culminating, or releasing season of life.
+5. Check Transit Passes for multi-pass patterns: identify all 3 exact dates and note which pass is underway. Check the Lunar Return to pinpoint the peak month within the transit window.
+6. Scan all remaining predictive layers and identify any 2–3 additional themes not already captured above.
+7. Rank urgency: primary direction within 0.5° (now) → convergence-flagged planets → eclipsed points → applying transit/arc within 0.5° (days–weeks) → within 1° (months) → within 3° (season) → progressions (years).
 
 ## Report Instructions
 Write in warm, direct, personal language — speak TO this person, not ABOUT them. Every paragraph must name at least one specific planet, sign, degree, or house. Do not list placements — interpret them. Do not use hedging phrases like "might suggest" or "could indicate" — make clear statements grounded in the data.

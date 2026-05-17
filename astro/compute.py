@@ -118,6 +118,46 @@ _SECT_NOCTURNAL = {"moon", "venus", "mars"}       # night sect planets
 _SECT_MALEFICS = {"saturn", "mars"}
 _SECT_BENEFICS = {"jupiter", "venus"}
 
+# Egyptian terms (bounds) — (start°, end°, planet) per sign; used in Almuten Figuris
+_EGYPTIAN_TERMS: dict[str, list[tuple[int, int, str]]] = {
+    "Aries":       [(0,6,"jupiter"),(6,12,"venus"),(12,20,"mercury"),(20,25,"mars"),(25,30,"saturn")],
+    "Taurus":      [(0,8,"venus"),(8,14,"mercury"),(14,22,"jupiter"),(22,27,"saturn"),(27,30,"mars")],
+    "Gemini":      [(0,6,"mercury"),(6,12,"jupiter"),(12,17,"venus"),(17,24,"mars"),(24,30,"saturn")],
+    "Cancer":      [(0,7,"mars"),(7,13,"venus"),(13,19,"mercury"),(19,26,"jupiter"),(26,30,"saturn")],
+    "Leo":         [(0,6,"jupiter"),(6,11,"venus"),(11,18,"saturn"),(18,24,"mercury"),(24,30,"mars")],
+    "Virgo":       [(0,7,"mercury"),(7,17,"venus"),(17,21,"jupiter"),(21,28,"mars"),(28,30,"saturn")],
+    "Libra":       [(0,6,"saturn"),(6,14,"mercury"),(14,21,"jupiter"),(21,28,"venus"),(28,30,"mars")],
+    "Scorpio":     [(0,7,"mars"),(7,11,"venus"),(11,19,"mercury"),(19,24,"jupiter"),(24,30,"saturn")],
+    "Sagittarius": [(0,12,"jupiter"),(12,17,"venus"),(17,21,"mercury"),(21,26,"saturn"),(26,30,"mars")],
+    "Capricorn":   [(0,7,"mercury"),(7,14,"jupiter"),(14,22,"venus"),(22,26,"saturn"),(26,30,"mars")],
+    "Aquarius":    [(0,7,"mercury"),(7,13,"venus"),(13,20,"jupiter"),(20,25,"mars"),(25,30,"saturn")],
+    "Pisces":      [(0,12,"venus"),(12,16,"jupiter"),(16,19,"mercury"),(19,28,"mars"),(28,30,"saturn")],
+}
+
+# Faces (decans) — three 10° faces per sign, rulers in Chaldean order from sign ruler
+_FACES: dict[str, list[str]] = {
+    "Aries":       ["mars","sun","venus"],
+    "Taurus":      ["mercury","moon","saturn"],
+    "Gemini":      ["jupiter","mars","sun"],
+    "Cancer":      ["venus","mercury","moon"],
+    "Leo":         ["saturn","jupiter","mars"],
+    "Virgo":       ["sun","venus","mercury"],
+    "Libra":       ["moon","saturn","jupiter"],
+    "Scorpio":     ["mars","sun","venus"],
+    "Sagittarius": ["mercury","moon","saturn"],
+    "Capricorn":   ["jupiter","mars","sun"],
+    "Aquarius":    ["venus","mercury","moon"],
+    "Pisces":      ["saturn","jupiter","mars"],
+}
+
+# Triplicity rulers (Ptolemaic system, day/night/cooperating)
+_TRIPLICITY_RULERS: dict[str, dict[str, str]] = {
+    "Fire":  {"day": "sun",    "night": "jupiter", "cooperating": "saturn"},
+    "Earth": {"day": "venus",  "night": "moon",    "cooperating": "mars"},
+    "Air":   {"day": "saturn", "night": "mercury", "cooperating": "jupiter"},
+    "Water": {"day": "venus",  "night": "mars",    "cooperating": "moon"},
+}
+
 # Fixed stars: (name, J2000 tropical longitude°, nature, interpretation)
 # Orb: 1.0° conjunction to any natal body or angle
 _FIXED_STARS: list[tuple[str, float, str, str]] = [
@@ -738,6 +778,364 @@ def compute_transit_to_progressed(
                     })
 
         return sorted(aspects, key=lambda x: x["orb"])
+    except Exception:
+        return []
+
+
+def compute_primary_directions(
+    natal_chart: dict,
+    birth_year: int, birth_month: int, birth_day: int,
+    birth_hour: int, birth_minute: int,
+    current_year: int, current_month: int, current_day: int,
+    tz_str: str,
+    orb: float = 1.0,
+) -> list[dict]:
+    """Naibod primary directions: directed angles → natal planets, directed planets → natal angles.
+
+    Each degree of ARMC advance ≈ 1 year of life (Naibod rate: 0.9856472°/year).
+    The most time-sensitive major-life-event indicator in classical Western astrology.
+    """
+    try:
+        import os
+        import swisseph as swe
+        import kerykeion as _kery
+        import pytz
+        from datetime import date, datetime
+
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+
+        natal_armc = natal_chart.get("_natal_armc")
+        natal_lat = natal_chart.get("_natal_lat")
+        if natal_armc is None or natal_lat is None:
+            return []
+
+        # Natal JD (convert birth local time to UT)
+        tz = pytz.timezone(tz_str or "UTC")
+        local_dt = tz.localize(datetime(birth_year, birth_month, birth_day, birth_hour, birth_minute))
+        utc_dt = local_dt.astimezone(pytz.UTC)
+        natal_jd = swe.julday(utc_dt.year, utc_dt.month, utc_dt.day,
+                              utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0)
+
+        # Obliquity of the ecliptic at birth (linear approximation, accurate to 0.01°)
+        T = (natal_jd - 2451545.0) / 36525.0
+        eps = 23.439291111 - 0.013004167 * T
+
+        # Age and Naibod arc
+        birth_date = date(birth_year, birth_month, birth_day)
+        current_date_obj = date(current_year, current_month, current_day)
+        age_years = (current_date_obj - birth_date).days / 365.25
+        arc = age_years * 0.9856472  # mean daily solar motion in degrees
+
+        # Directed ARMC → directed house cusps
+        directed_armc = (natal_armc + arc) % 360
+        cusps, ascmc = swe.houses_armc(directed_armc, natal_lat, eps, b'P')
+        directed_asc = ascmc[0]
+        directed_mc = ascmc[1]
+
+        results: list[dict] = []
+
+        # 1. Directed Ascendant and Midheaven aspecting natal planets/angles
+        natal_targets = {k: natal_chart.get(k) for k in (
+            "sun", "moon", "mercury", "venus", "mars",
+            "jupiter", "saturn", "uranus", "neptune", "pluto",
+            "ascendant", "midheaven", "chiron", "north_node",
+        )}
+
+        for label, directed_lon in (("Directed Ascendant", directed_asc), ("Directed Midheaven", directed_mc)):
+            for body_name, body_data in natal_targets.items():
+                if not body_data or body_data.get("abs_pos") is None:
+                    continue
+                asp = _find_aspect(directed_lon, body_data["abs_pos"], max_orb=orb)
+                if asp:
+                    aspect_name, aspect_orb = asp
+                    sign, pos = _sign_from_abs_pos(directed_lon)
+                    results.append({
+                        "directed_point": label,
+                        "natal_point": body_name,
+                        "aspect": aspect_name.lower(),
+                        "orb": str(round(aspect_orb, 2)),
+                        "directed_sign": sign,
+                        "directed_pos": round(pos, 2),
+                    })
+
+        # 2. Directed planets aspecting all natal planets and angles (inter-planet directions)
+        all_natal_targets: dict[str, float] = {}
+        for angle in ("ascendant", "midheaven"):
+            d = natal_chart.get(angle)
+            if d and d.get("abs_pos") is not None:
+                all_natal_targets[angle] = float(d["abs_pos"])
+        for np_ in ("sun", "moon", "mercury", "venus", "mars", "jupiter",
+                    "saturn", "uranus", "neptune", "pluto", "chiron", "north_node"):
+            d = natal_chart.get(np_)
+            if d and d.get("abs_pos") is not None:
+                all_natal_targets[np_] = float(d["abs_pos"])
+
+        for planet_name in ("sun", "moon", "mercury", "venus", "mars",
+                            "jupiter", "saturn", "uranus", "neptune", "pluto"):
+            pdata = natal_chart.get(planet_name)
+            if not pdata or pdata.get("abs_pos") is None:
+                continue
+            # Convert natal ecliptic lon to RA, advance by arc, convert back
+            eq = swe.cotrans((float(pdata["abs_pos"]), 0.0, 1.0), -eps)
+            directed_ra = (eq[0] + arc) % 360
+            ecl_back = swe.cotrans((directed_ra, eq[1], 1.0), eps)
+            directed_planet_lon = ecl_back[0]
+
+            for target_name, target_lon in all_natal_targets.items():
+                if target_name == planet_name:
+                    continue  # skip self
+                asp = _find_aspect(directed_planet_lon, target_lon, max_orb=orb)
+                if asp:
+                    aspect_name, aspect_orb = asp
+                    sign, pos = _sign_from_abs_pos(directed_planet_lon)
+                    results.append({
+                        "directed_point": f"Directed {planet_name.capitalize()}",
+                        "natal_point": target_name,
+                        "aspect": aspect_name.lower(),
+                        "orb": str(round(aspect_orb, 2)),
+                        "directed_sign": sign,
+                        "directed_pos": round(pos, 2),
+                    })
+
+        return sorted(results, key=lambda x: float(x["orb"]))
+    except Exception:
+        return []
+
+
+def compute_lunar_return(
+    natal_chart: dict,
+    current_year: int, current_month: int, current_day: int,
+    current_hour: int, current_minute: int,
+    city: str, nation: str,
+) -> dict:
+    """Compute the next lunar return chart: when the Moon returns to its natal degree.
+
+    The lunar return recurs every ~27.3 days and provides monthly precision timing.
+    Cast at the current location, not the birth location.
+    """
+    try:
+        import os
+        import swisseph as swe
+        import kerykeion as _kery
+
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+
+        natal_moon = natal_chart.get("moon")
+        if not natal_moon or natal_moon.get("abs_pos") is None:
+            return {}
+
+        natal_moon_lon = float(natal_moon["abs_pos"])
+        current_jd = swe.julday(current_year, current_month, current_day,
+                                current_hour + current_minute / 60.0)
+
+        # Moon's current longitude — estimate next crossing
+        current_moon_lon = swe.calc_ut(current_jd, swe.MOON)[0][0]
+        forward_dist = (natal_moon_lon - current_moon_lon) % 360
+        approx_jd = current_jd + forward_dist / 13.2
+
+        # Binary search within ±1.5 days of estimate
+        lo, hi = approx_jd - 1.5, approx_jd + 1.5
+        for _ in range(50):
+            mid = (lo + hi) / 2
+            mid_lon = swe.calc_ut(mid, swe.MOON)[0][0]
+            dist_to_target = (natal_moon_lon - mid_lon) % 360
+            if dist_to_target > 180:  # overshot
+                hi = mid
+            else:  # hasn't reached yet
+                lo = mid
+        lr_jd = (lo + hi) / 2
+
+        # Convert JD to UTC calendar date/time
+        yr, mo, dy, hr_frac = swe.revjul(lr_jd)
+        hr_int = int(hr_frac)
+        mn_int = int((hr_frac - hr_int) * 60)
+        lr_date_str = f"{int(yr)}-{int(mo):02d}-{int(dy):02d}"
+        lr_time_str = f"{hr_int:02d}:{mn_int:02d} UTC"
+
+        # Build lunar return chart at current location
+        lr_subject = AstrologicalSubject(
+            name="Lunar Return",
+            year=int(yr), month=int(mo), day=int(dy),
+            hour=hr_int, minute=mn_int,
+            city=city, nation=nation,
+            tz_str="UTC",
+            online=True,
+        )
+
+        first = getattr(lr_subject, "first_house", None)
+        tenth = getattr(lr_subject, "tenth_house", None)
+
+        lr: dict = {
+            "return_date": lr_date_str,
+            "return_time": lr_time_str,
+            "ascendant": {
+                "sign": getattr(first, "sign", None),
+                "position": round(getattr(first, "position", 0.0), 2),
+                "abs_pos": round(getattr(first, "abs_pos", 0.0), 2),
+            } if first else None,
+            "midheaven": {
+                "sign": getattr(tenth, "sign", None),
+                "position": round(getattr(tenth, "position", 0.0), 2),
+                "abs_pos": round(getattr(tenth, "abs_pos", 0.0), 2),
+            } if tenth else None,
+        }
+
+        # LR planet positions and Moon house
+        for planet in ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"):
+            lr[planet] = _safe_planet(lr_subject, planet)
+
+        # Angular planets: within 5° of LR ASC or MC
+        asc_abs = float(getattr(first, "abs_pos", 0) or 0) if first else None
+        mc_abs = float(getattr(tenth, "abs_pos", 0) or 0) if tenth else None
+        angular = []
+        for planet in ("sun", "moon", "mercury", "venus", "mars",
+                       "jupiter", "saturn", "uranus", "neptune", "pluto"):
+            p = lr.get(planet) or _safe_planet(lr_subject, planet)
+            if not p or p.get("abs_pos") is None:
+                continue
+            for angle_name, angle_abs in (("ascendant", asc_abs), ("midheaven", mc_abs)):
+                if angle_abs is None:
+                    continue
+                diff = _angular_diff(float(p["abs_pos"]), angle_abs)
+                if diff <= 5.0:
+                    angular.append({"planet": planet, "angle": angle_name, "orb": round(diff, 2)})
+        lr["angular_planets"] = angular
+
+        # LR house-stellium detection (houses with 2+ planets)
+        lr_houses: dict[str, dict] = {}
+        for i, attr in enumerate(_HOUSE_ATTRS, 1):
+            h = getattr(lr_subject, attr, None)
+            if h:
+                lr_houses[str(i)] = {
+                    "sign": getattr(h, "sign", None),
+                    "position": round(getattr(h, "position", 0.0), 2),
+                    "abs_pos": round(getattr(h, "abs_pos", 0.0), 2),
+                }
+
+        lr_house_map: dict[str, list[str]] = {}
+        all_planets = ("sun", "moon", "mercury", "venus", "mars",
+                       "jupiter", "saturn", "uranus", "neptune", "pluto")
+        for planet in all_planets:
+            p = lr.get(planet) or _safe_planet(lr_subject, planet)
+            if p and p.get("abs_pos") is not None:
+                h = _house_from_lon(float(p["abs_pos"]), lr_houses)
+                if h:
+                    hn = _HOUSE_NUMBER.get(h)
+                    if hn:
+                        lr_house_map.setdefault(str(hn), []).append(planet)
+
+        stellia = {}
+        for house_str, planets_in in lr_house_map.items():
+            if len(planets_in) >= 2:
+                stellia[house_str] = [p.capitalize() for p in planets_in]
+        if stellia:
+            lr["stellia"] = stellia
+
+        return lr
+    except Exception:
+        return {}
+
+
+def compute_transit_passes(
+    natal_chart: dict,
+    current_year: int, current_month: int, current_day: int,
+    current_hour: int = 12, current_minute: int = 0,
+    window_days: int = 365,
+    exact_orb: float = 0.5,
+) -> list[dict]:
+    """Scan 1 year for all exact transit contacts (outer planets → natal points).
+
+    Returns each transit pair with all exact-contact dates grouped into passes.
+    Multi-pass entries (2-3 dates) reveal the full retrograde triple-transit pattern
+    with specific dates for each station, allowing precise life-event timing advice.
+    """
+    try:
+        import os
+        import swisseph as swe
+        import kerykeion as _kery
+        from datetime import date as dt_date, timedelta
+
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+
+        outer_ids = {
+            "saturn": swe.SATURN,
+            "uranus": swe.URANUS,
+            "neptune": swe.NEPTUNE,
+            "pluto": swe.PLUTO,
+        }
+
+        # Natal positions to check against
+        natal_pos: dict[str, float] = {}
+        for body in list(_PLANETS) + ["ascendant", "midheaven", "north_node"]:
+            d = natal_chart.get(body)
+            if d and d.get("abs_pos") is not None:
+                natal_pos[body] = float(d["abs_pos"])
+
+        start_jd = swe.julday(current_year, current_month, current_day,
+                              current_hour + current_minute / 60.0)
+
+        # accumulate: key → list of (date_str, orb, retrograde)
+        raw: dict[str, list[tuple[str, float, bool]]] = {}
+
+        for planet_name, body_id in outer_ids.items():
+            for day_offset in range(window_days + 1):
+                jd = start_jd + day_offset
+                try:
+                    calc = swe.calc_ut(jd, body_id)[0]
+                    t_lon = calc[0]
+                    t_retro = calc[3] < 0
+                except Exception:
+                    continue
+
+                yr, mo, dy, _ = swe.revjul(jd)
+                date_str = f"{int(yr)}-{int(mo):02d}-{int(dy):02d}"
+
+                for natal_name, n_lon in natal_pos.items():
+                    asp = _find_aspect(t_lon, n_lon, max_orb=exact_orb)
+                    if asp:
+                        aspect_name, orb_val = asp
+                        key = f"{planet_name}|{natal_name}|{aspect_name}"
+                        raw.setdefault(key, []).append((date_str, round(orb_val, 2), t_retro))
+
+        # Group consecutive days into distinct passes (gap > 14 days = new pass)
+        results: list[dict] = []
+        for key, contacts in raw.items():
+            planet_name, natal_name, aspect_name = key.split("|")
+
+            # Group into passes
+            passes_grouped: list[list[tuple[str, float, bool]]] = []
+            current_group: list[tuple[str, float, bool]] = [contacts[0]]
+            for i in range(1, len(contacts)):
+                prev_d = dt_date.fromisoformat(contacts[i - 1][0])
+                curr_d = dt_date.fromisoformat(contacts[i][0])
+                if (curr_d - prev_d).days <= 14:
+                    current_group.append(contacts[i])
+                else:
+                    passes_grouped.append(current_group)
+                    current_group = [contacts[i]]
+            passes_grouped.append(current_group)
+
+            # Peak (minimum orb) date for each pass
+            pass_summaries = []
+            for group in passes_grouped:
+                peak = min(group, key=lambda x: x[1])
+                pass_summaries.append({
+                    "date": peak[0],
+                    "orb": peak[1],
+                    "retrograde": peak[2],
+                })
+
+            results.append({
+                "transiting_planet": planet_name,
+                "natal_planet": natal_name,
+                "aspect": aspect_name,
+                "passes": pass_summaries,
+                "multi_pass": len(pass_summaries) > 1,
+            })
+
+        # Sort: multi-pass first, then by first pass date
+        results.sort(key=lambda x: (not x["multi_pass"], x["passes"][0]["date"] if x["passes"] else "9999"))
+        return results
     except Exception:
         return []
 
@@ -2209,6 +2607,186 @@ def compute_antiscia(chart: dict, orb: float = 1.5) -> list[dict]:
     return connections
 
 
+def compute_almuten_figuris(chart: dict) -> Optional[dict]:
+    """Find the Almuten Figuris: the planet with the highest cumulative dignity score
+    at the chart's five key positions (Sun, Moon, ASC, Part of Fortune, Part of Spirit).
+
+    Scoring per position: domicile=5, exaltation=4, triplicity=3, term(bound)=2, face=1.
+    Detriment=-5, fall=-4 are applied as penalties. The winning planet is the
+    traditional 'master of the chart', often different from the chart ruler.
+    """
+    _SCORED_PLANETS = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"]
+
+    # Positions to evaluate (sign, position-within-sign, abs_pos)
+    positions: list[tuple[str, str, float, float]] = []  # (label, sign, pos_in_sign, abs)
+
+    sun = chart.get("sun")
+    if sun and sun.get("sign") and sun.get("position") is not None and sun.get("abs_pos") is not None:
+        positions.append(("sun", sun["sign"], float(sun["position"]), float(sun["abs_pos"])))
+
+    moon = chart.get("moon")
+    if moon and moon.get("sign") and moon.get("position") is not None and moon.get("abs_pos") is not None:
+        positions.append(("moon", moon["sign"], float(moon["position"]), float(moon["abs_pos"])))
+
+    asc = chart.get("ascendant")
+    if asc and asc.get("sign") and asc.get("position") is not None and asc.get("abs_pos") is not None:
+        positions.append(("ascendant", asc["sign"], float(asc["position"]), float(asc["abs_pos"])))
+
+    pof = chart.get("part_of_fortune")
+    if pof and pof.get("abs_pos") is not None:
+        sign, pos = _sign_from_abs_pos(float(pof["abs_pos"]))
+        positions.append(("part_of_fortune", sign, pos, float(pof["abs_pos"])))
+
+    spirit = (chart.get("arabic_parts") or {}).get("spirit")
+    if spirit and spirit.get("abs_pos") is not None:
+        sign, pos = _sign_from_abs_pos(float(spirit["abs_pos"]))
+        positions.append(("part_of_spirit", sign, pos, float(spirit["abs_pos"])))
+
+    if not positions:
+        return None
+
+    is_day = (chart.get("sect") or {}).get("chart_type", "").lower() == "day"
+
+    scores: dict[str, int] = {p: 0 for p in _SCORED_PLANETS}
+    breakdown: dict[str, list[str]] = {p: [] for p in _SCORED_PLANETS}
+
+    for label, sign, pos_in_sign, _abs in positions:
+        element = _SIGN_ELEMENT.get(sign)
+        for planet in _SCORED_PLANETS:
+            dig = _DIGNITIES.get(planet) or {}
+
+            # Domicile / detriment
+            if sign in dig.get("domicile", []):
+                scores[planet] += 5
+                breakdown[planet].append(f"domicile@{label}")
+            elif sign in dig.get("detriment", []):
+                scores[planet] -= 5
+
+            # Exaltation / fall
+            if sign in dig.get("exaltation", []):
+                scores[planet] += 4
+                breakdown[planet].append(f"exaltation@{label}")
+            elif sign in dig.get("fall", []):
+                scores[planet] -= 4
+
+            # Triplicity (day lord = 3, night lord = 3, cooperating = 1)
+            if element:
+                trip = _TRIPLICITY_RULERS.get(element, {})
+                if is_day and trip.get("day") == planet:
+                    scores[planet] += 3
+                    breakdown[planet].append(f"triplicity(day)@{label}")
+                elif not is_day and trip.get("night") == planet:
+                    scores[planet] += 3
+                    breakdown[planet].append(f"triplicity(night)@{label}")
+                if trip.get("cooperating") == planet:
+                    scores[planet] += 1
+                    breakdown[planet].append(f"triplicity(coop)@{label}")
+
+            # Egyptian term (bound) — 2 points
+            for start, end, term_planet in _EGYPTIAN_TERMS.get(sign, []):
+                if start <= pos_in_sign < end and term_planet == planet:
+                    scores[planet] += 2
+                    breakdown[planet].append(f"term@{label}")
+                    break
+
+            # Face (decan) — 1 point
+            face_idx = int(pos_in_sign // 10)
+            faces = _FACES.get(sign, [])
+            if face_idx < len(faces) and faces[face_idx] == planet:
+                scores[planet] += 1
+                breakdown[planet].append(f"face@{label}")
+
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    winner_name, winner_score = sorted_scores[0]
+    runner_up = sorted_scores[1] if len(sorted_scores) > 1 else None
+
+    # Enrich with the winner's natal placement
+    winner_data = chart.get(winner_name) or {}
+
+    return {
+        "planet": winner_name,
+        "score": winner_score,
+        "sign": winner_data.get("sign"),
+        "position": winner_data.get("position"),
+        "house": winner_data.get("house"),
+        "retrograde": winner_data.get("retrograde", False),
+        "dignity": winner_data.get("dignity"),
+        "runner_up": runner_up[0] if runner_up else None,
+        "runner_up_score": runner_up[1] if runner_up else None,
+        "all_scores": scores,
+        "breakdown": breakdown[winner_name],
+    }
+
+
+def compute_dispositor_tree(chart: dict) -> dict:
+    """Trace sign-rulership chains to find the final dispositor.
+
+    Each planet is 'disposed by' the ruler of its sign. Following the chain leads to:
+    - A final dispositor: a planet in its own sign (pinnacle of chart authority)
+    - A mutual reception: two planets each in the other's sign (co-rulership cycle)
+    - A longer cycle: 3+ planets in a circular chain
+    When one planet is the sole final dispositor, it has authority over all others.
+    """
+    planet_sign: dict[str, str] = {}
+    for p in _PLANETS:
+        d = chart.get(p)
+        if d and d.get("sign"):
+            planet_sign[p] = d["sign"]
+
+    if not planet_sign:
+        return {}
+
+    # Trace chain from each planet
+    chains: dict[str, list[str]] = {}
+    for start in planet_sign:
+        chain = [start]
+        current = start
+        visited: set[str] = {start}
+        while True:
+            sign = planet_sign.get(current)
+            if not sign:
+                break
+            dispositor = _SIGN_RULER.get(sign)
+            if not dispositor or dispositor not in planet_sign:
+                break
+            if dispositor == current:      # in own sign — final dispositor
+                break
+            if dispositor in visited:      # cycle
+                chain.append(f"↺{dispositor}")
+                break
+            chain.append(dispositor)
+            visited.add(dispositor)
+            current = dispositor
+        chains[start] = chain
+
+    # Final dispositors: planets in their own sign
+    final_dispositors = [
+        p for p in planet_sign
+        if _SIGN_RULER.get(planet_sign[p]) == p
+    ]
+
+    # Check for mutual receptions (pairs each in the other's sign)
+    mutual_reception_pairs: list[tuple[str, str]] = []
+    checked: set[frozenset] = set()
+    for p in planet_sign:
+        dispositor = _SIGN_RULER.get(planet_sign[p])
+        if dispositor and dispositor in planet_sign and dispositor != p:
+            if _SIGN_RULER.get(planet_sign[dispositor]) == p:
+                pair = frozenset({p, dispositor})
+                if pair not in checked:
+                    mutual_reception_pairs.append((p, dispositor))
+                    checked.add(pair)
+
+    return {
+        "chains": chains,
+        "final_dispositors": final_dispositors,
+        "single_final_dispositor": final_dispositors[0] if len(final_dispositors) == 1 else None,
+        "mutual_reception_cycles": [list(pair) for pair in
+                                    [frozenset(p) for p in mutual_reception_pairs]],
+        "has_single_ruler": len(final_dispositors) == 1,
+    }
+
+
 def compute_chart(
     full_name: str,
     birth_year: int, birth_month: int, birth_day: int,
@@ -2311,5 +2889,13 @@ def compute_chart(
     # Additional classical lots and antiscia
     chart["arabic_parts"] = compute_arabic_parts(chart)
     chart["antiscia"] = compute_antiscia(chart)
+
+    # Store natal metadata needed for primary directions (private fields, not displayed)
+    try:
+        chart["_natal_armc"] = float(getattr(subject, "armc", None) or 0)
+        chart["_natal_lat"] = float(getattr(subject, "lat", None) or 0)
+    except (TypeError, ValueError):
+        chart["_natal_armc"] = None
+        chart["_natal_lat"] = None
 
     return chart
