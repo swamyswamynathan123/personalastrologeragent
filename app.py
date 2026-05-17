@@ -189,12 +189,33 @@ if "_prepared_state" not in st.session_state:
     st.session_state._prepared_state = None
 if "_synastry_prepared" not in st.session_state:
     st.session_state._synastry_prepared = None
+if "_stream_error" not in st.session_state:
+    st.session_state._stream_error = None
 
 ALL_TIMEZONES = pytz.all_timezones
 DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
 
 # ── Sidebar: input form ───────────────────────────────────────────────────────
 with st.sidebar:
+    # Chart at a Glance — shown once a report is available
+    if st.session_state.report_result:
+        _r = st.session_state.report_result
+        _cd = _r.get("chart_data") or {}
+        _sun = _cd.get("sun") or {}
+        _moon = _cd.get("moon") or {}
+        _asc = _cd.get("ascendant") or {}
+        st.markdown("### ✨ Chart at a Glance")
+        st.markdown(f"""
+<div style="background:#1e1e38;border:1px solid #2e2e4e;border-radius:10px;padding:0.9rem 1rem;margin-bottom:1rem;font-size:0.88rem;line-height:1.7;">
+<span style="color:#9988bb;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;">{_r.get('full_name','')}</span><br>
+☉ <strong style="color:#d4bfff;">{_sun.get('sign','—')} {_sun.get('position','')}</strong>°<br>
+☽ <strong style="color:#d4bfff;">{_moon.get('sign','—')} {_moon.get('position','')}</strong>°<br>
+↑ <strong style="color:#d4bfff;">{_asc.get('sign','—')} {_asc.get('position','')}</strong>° ASC<br>
+<span style="color:#9988bb;font-size:0.78rem;">{_r.get('house_system','Placidus')} houses</span>
+</div>
+""", unsafe_allow_html=True)
+        st.divider()
+
     st.markdown("## ⭐ Your Details")
 
     with st.form("astro_form"):
@@ -256,6 +277,7 @@ if submitted:
     st.session_state.chat_history = []
     st.session_state.validation_message = None
     st.session_state._prepared_state = None
+    st.session_state._stream_error = None
 
     payload: AstrologerState = {
         "full_name": full_name.strip() if full_name else None,
@@ -354,13 +376,20 @@ with natal_tab:
                     )
             st.divider()
 
-        # Stream the report (Streamlit renders markdown natively during streaming)
-        report_text = st.write_stream(generate_report_stream(prepared))
-
-        # Persist complete result, then rerun to render the styled cached branch
-        st.session_state.report_result = {**prepared, "final_report": report_text}
-        st.session_state._prepared_state = None
-        st.rerun()
+        if st.session_state._stream_error:
+            st.error(f"Report generation failed: {st.session_state._stream_error}")
+            if st.button("Retry", type="primary"):
+                st.session_state._stream_error = None
+                st.rerun()
+        else:
+            try:
+                report_text = st.write_stream(generate_report_stream(prepared))
+                st.session_state.report_result = {**prepared, "final_report": report_text}
+                st.session_state._prepared_state = None
+                st.rerun()
+            except Exception as exc:
+                st.session_state._stream_error = str(exc)
+                st.rerun()
 
     elif st.session_state.report_result:
         result = st.session_state.report_result
@@ -418,6 +447,13 @@ with natal_tab:
                         mime="image/svg+xml",
                     )
             st.divider()
+
+        # House system mismatch warning
+        if result.get("house_system") and result.get("house_system") != house_system:
+            st.info(
+                f"House system changed to **{house_system}** — this reading used **{result['house_system']}**. "
+                "Click **Generate My Reading** to update your chart."
+            )
 
         # Report rendered in a styled card
         import markdown as _md
