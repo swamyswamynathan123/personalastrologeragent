@@ -317,11 +317,23 @@ with st.sidebar:
         )
 
         st.markdown("#### Optional")
-        report_focus = st.text_input(
+        _FOCUS_OPTIONS = [
+            "Career & Purpose",
+            "Relationships & Love",
+            "Finance & Wealth",
+            "Health & Vitality",
+            "Spirituality & Growth",
+            "Family & Home",
+            "Creativity & Expression",
+            "Travel & Adventure",
+        ]
+        _focus_selections = st.multiselect(
             "Report Focus",
-            placeholder="Career, relationships, spiritual growth…",
+            options=_FOCUS_OPTIONS,
+            placeholder="Select one or more focus areas…",
             key="f_report_focus",
         )
+        report_focus = ", ".join(_focus_selections) if _focus_selections else None
         additional_info = st.text_area(
             "Additional Context",
             placeholder="Life events or questions to address…",
