@@ -169,6 +169,20 @@ html, body, [class*="css"] {
     border-radius: 8px !important;
 }
 
+/* ── Download buttons ────────────────────────────────────────────── */
+[data-testid="stDownloadButton"] > button {
+    background: #1e1e38 !important;
+    border: 1px solid #3a3a60 !important;
+    color: #d4bfff !important;
+    border-radius: 8px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+[data-testid="stDownloadButton"] > button:hover {
+    background: #2a2a50 !important;
+    border-color: #8866cc !important;
+    color: #e8d8ff !important;
+}
+
 /* ── Alert / info boxes ──────────────────────────────────────────── */
 [data-testid="stAlert"] {
     border-radius: 8px;
