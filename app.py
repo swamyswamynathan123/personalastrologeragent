@@ -213,6 +213,20 @@ html, body, [class*="css"] {
 /* ── Divider ─────────────────────────────────────────────────────── */
 hr { border-color: #2e2e4e; }
 
+/* ── Expanders ───────────────────────────────────────────────────── */
+[data-testid="stExpander"] summary {
+    color: #c8b8e8 !important;
+    font-family: "Georgia", serif;
+}
+[data-testid="stExpander"] summary:hover {
+    color: #d4bfff !important;
+}
+[data-testid="stExpander"] {
+    border: 1px solid #2e2e4e !important;
+    border-radius: 8px !important;
+    background: #1e1e38 !important;
+}
+
 /* ── Placeholder panel ───────────────────────────────────────────── */
 .placeholder-panel {
     display: flex;
