@@ -439,7 +439,125 @@ def compute_progressions(
         "abs_pos": round(getattr(tenth, "abs_pos", 0.0), 2),
     } if tenth else None
 
+    # Progressed lunation phase: angle from prog Sun to prog Moon
+    ps = progressed.get("sun")
+    pm = progressed.get("moon")
+    if ps and pm and ps.get("abs_pos") is not None and pm.get("abs_pos") is not None:
+        angle = (pm["abs_pos"] - ps["abs_pos"]) % 360
+        if angle < 45:
+            phase, desc = "New Moon", "initiation and new beginning — commitments made now carry forward for ~29 years"
+        elif angle < 90:
+            phase, desc = "Crescent", "building momentum, breaking from conditioning, asserting intent"
+        elif angle < 135:
+            phase, desc = "First Quarter", "crisis of action, decisive turning point, breaking from the past"
+        elif angle < 180:
+            phase, desc = "Gibbous", "refinement and adjustment — perfecting skills before culmination"
+        elif angle < 225:
+            phase, desc = "Full Moon", "culmination, maximum awareness, relationships and polarity illuminated"
+        elif angle < 270:
+            phase, desc = "Disseminating", "sharing and teaching insights gained at the Full Moon"
+        elif angle < 315:
+            phase, desc = "Last Quarter", "crisis of consciousness, reorientation, releasing old structures"
+        else:
+            phase, desc = "Balsamic", "release and completion — the old cycle ending before rebirth"
+        degrees_to_new = (360 - angle) % 360
+        years_to_new = round(degrees_to_new / 12.0, 1)
+        progressed["progressed_lunation"] = {
+            "phase": phase,
+            "angle": round(angle, 1),
+            "description": desc,
+            "years_to_next_new_moon": years_to_new,
+        }
+
     return progressed
+
+
+def compute_eclipse_sensitivity(
+    chart: dict,
+    current_year: int, current_month: int, current_day: int,
+    current_hour: int = 12, current_minute: int = 0,
+) -> list[dict]:
+    """Return natal planets/angles within 3° of solar or lunar eclipses in a ±6-month window."""
+    try:
+        import os
+        import swisseph as swe
+        import kerykeion as _kery
+        swe.set_ephe_path(os.path.join(os.path.dirname(_kery.__file__), "sweph"))
+
+        current_jd = swe.julday(current_year, current_month, current_day,
+                                current_hour + current_minute / 60.0)
+        search_start = current_jd - 183
+
+        eclipses: list[dict] = []
+
+        # Solar eclipses — Sun position = eclipse degree
+        jd = search_start
+        for _ in range(5):
+            try:
+                retval, tret = swe.sol_eclipse_when_glob(jd, 0, 0, False)
+                if retval < 0 or not tret or tret[0] == 0:
+                    break
+                ejd = tret[0]
+                lon = swe.calc_ut(ejd, swe.SUN)[0][0]
+                sign, pos = _sign_from_abs_pos(lon)
+                eclipses.append({"type": "solar", "jd": ejd, "abs_pos": round(lon, 2),
+                                  "sign": sign, "position": round(pos, 2),
+                                  "timing": "past" if ejd < current_jd else "upcoming"})
+                jd = ejd + 10
+            except Exception:
+                break
+
+        # Lunar eclipses — Moon position = eclipse degree
+        jd = search_start
+        for _ in range(5):
+            try:
+                retval, tret = swe.lun_eclipse_when_glob(jd, 0, 0, False)
+                if retval < 0 or not tret or tret[0] == 0:
+                    break
+                ejd = tret[0]
+                lon = swe.calc_ut(ejd, swe.MOON)[0][0]
+                sign, pos = _sign_from_abs_pos(lon)
+                eclipses.append({"type": "lunar", "jd": ejd, "abs_pos": round(lon, 2),
+                                  "sign": sign, "position": round(pos, 2),
+                                  "timing": "past" if ejd < current_jd else "upcoming"})
+                jd = ejd + 10
+            except Exception:
+                break
+
+        # Keep only within ±6 months
+        eclipses = [e for e in eclipses if abs(e["jd"] - current_jd) <= 183]
+
+        if not eclipses:
+            return []
+
+        # Natal bodies to test
+        bodies: dict[str, float] = {}
+        for planet in _PLANETS:
+            d = chart.get(planet)
+            if d and d.get("abs_pos") is not None:
+                bodies[planet] = d["abs_pos"]
+        for key in ("ascendant", "midheaven", "north_node", "chiron"):
+            d = chart.get(key)
+            if d and d.get("abs_pos") is not None:
+                bodies[key] = d["abs_pos"]
+
+        hits: list[dict] = []
+        for eclipse in eclipses:
+            for body, body_pos in bodies.items():
+                diff = abs((body_pos - eclipse["abs_pos"] + 180) % 360 - 180)
+                if diff <= 3.0:
+                    hits.append({
+                        "body": body,
+                        "eclipse_type": eclipse["type"],
+                        "eclipse_sign": eclipse["sign"],
+                        "eclipse_position": eclipse["position"],
+                        "orb": round(diff, 2),
+                        "timing": eclipse["timing"],
+                    })
+
+        return sorted(hits, key=lambda x: x["orb"])
+    except Exception:
+        return []
 
 
 def compute_progressed_aspects(natal_chart: dict, progressions: dict) -> list[dict]:

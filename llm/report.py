@@ -422,6 +422,9 @@ def _format_progressions(prog: dict | None) -> str:
             lines.append(f"- Progressed {label}: {data['sign']} {data['position']}°")
         else:
             lines.append(f"- Progressed {label}: unavailable")
+    lunation = _format_progressed_lunation(prog)
+    if lunation:
+        lines.append(lunation)
     return "\n".join(lines)
 
 
@@ -439,6 +442,144 @@ def _format_upcoming_transits(upcoming: list[dict]) -> str:
             f"- {tp}{retro} {t['aspect']} natal {np_} — exact ~{exact} (min orb {orb}°)"
         )
     return "\n".join(lines)
+
+
+def _format_eclipse_sensitivity(eclipses: list[dict]) -> str:
+    if not eclipses:
+        return "No natal planets or angles within 3° of eclipses in the ±6-month window."
+    lines = []
+    for e in eclipses:
+        body = e["body"].replace("_", " ").title()
+        etype = e.get("eclipse_type", "eclipse").replace("_", " ")
+        lines.append(
+            f"- {body} (natal {e.get('body_sign', '?')} {e.get('body_pos', '?')}°) within {e['orb']}° of "
+            f"{etype} at {e.get('eclipse_sign', '?')} {e.get('eclipse_pos', '?')}° on {e['eclipse_date']}"
+        )
+    return "\n".join(lines)
+
+
+def _format_progressed_lunation(prog: dict) -> str:
+    pl = prog.get("progressed_lunation")
+    if not pl:
+        return ""
+    return (
+        f"- Progressed Lunar Phase: **{pl['phase']}** "
+        f"(Prog Moon {pl['angle']}° ahead of Prog Sun) — {pl['description']}\n"
+        f"  → Years to next Progressed New Moon: ~{pl['years_to_next_new_moon']}"
+    )
+
+
+def _compute_convergences(chart: dict, state: "AstrologerState") -> list[str]:
+    """Detect the same planet activated across multiple timing systems."""
+    convergences = []
+
+    profection = chart.get("profection") or {}
+    firdaria = chart.get("firdaria") or {}
+    vedic = chart.get("vedic") or {}
+    dasha = (vedic.get("dasha") or {}) if vedic else {}
+    transits = chart.get("transits") or []
+    upcoming = chart.get("upcoming_transits") or []
+    solar_arc_aspects = chart.get("solar_arc_aspects") or []
+    progressed_aspects = chart.get("progressed_aspects") or []
+
+    prof_lord = (profection.get("lord_of_year") or "").lower()
+    fird_major = (firdaria.get("major_lord") or "").lower()
+    maha_lord = (dasha.get("mahadasha_lord") or "").lower()
+
+    # Triple convergence across all three systems
+    if prof_lord and fird_major and maha_lord and prof_lord == fird_major == maha_lord:
+        convergences.append(
+            f"TRIPLE CONVERGENCE — {prof_lord.capitalize()} is simultaneously the Annual Profection "
+            f"Lord, Firdaria Major Lord, and Vimshottari Mahadasha Lord. All three major timing systems "
+            f"across Western and Vedic traditions point to the same planet. "
+            f"{prof_lord.capitalize()}'s natal condition and any current transits to it represent the "
+            f"single most defining theme of this entire life phase."
+        )
+    elif fird_major and maha_lord and fird_major == maha_lord:
+        convergences.append(
+            f"CROSS-TRADITION CONVERGENCE — {fird_major.capitalize()} is both the Firdaria Major Lord "
+            f"(Western) and the Vimshottari Mahadasha Lord (Vedic). Both biographical timing systems "
+            f"agree: this planet defines the current chapter across traditions."
+        )
+    if prof_lord and fird_major and prof_lord == fird_major and prof_lord != maha_lord:
+        convergences.append(
+            f"ANNUAL AMPLIFICATION — {prof_lord.capitalize()} is both the Annual Profection Lord and "
+            f"Firdaria Major Lord, doubling its activation for the current year."
+        )
+    if prof_lord and maha_lord and prof_lord == maha_lord and prof_lord != fird_major:
+        convergences.append(
+            f"VEDIC-WESTERN ANNUAL SYNC — {prof_lord.capitalize()} is both the Annual Profection Lord "
+            f"and Vimshottari Mahadasha Lord — the annual Western timing confirms the Vedic arc."
+        )
+
+    # Profection lord currently transited by an outer planet
+    outer_planets = {"saturn", "uranus", "neptune", "pluto", "jupiter"}
+    if prof_lord:
+        for t in transits:
+            if (t.get("natal_planet", "").lower() == prof_lord
+                    and t.get("transiting_planet", "").lower() in outer_planets):
+                tp = t["transiting_planet"].capitalize()
+                convergences.append(
+                    f"YEAR LORD UNDER TRANSIT — Transiting {tp} is {t['aspect']} natal "
+                    f"{prof_lord.capitalize()} (orb {t['orb']}°, the Profection Lord of the Year). "
+                    f"This dramatically intensifies the current year's themes."
+                )
+        for t in upcoming[:1]:
+            if (t.get("natal_planet", "").lower() == prof_lord
+                    and t.get("transiting_planet", "").lower() in outer_planets):
+                tp = t["transiting_planet"].capitalize()
+                convergences.append(
+                    f"YEAR LORD INCOMING — Transiting {tp} will {t['aspect']} natal "
+                    f"{prof_lord.capitalize()} (Profection Lord of the Year) ~{t.get('exact_date', 'soon')}. "
+                    f"Most time-sensitive event on the horizon."
+                )
+
+    # Solar arc applying to ASC or MC
+    for sa in solar_arc_aspects:
+        np_ = (sa.get("natal_planet") or "").lower()
+        if np_ in ("ascendant", "midheaven") and sa.get("applying"):
+            dp = sa["directed_planet"].replace("arc_", "Arc ").replace("_", " ").title()
+            orb = float(sa.get("orb", 1))
+            timeframe = "months" if orb < 0.5 else "about a year"
+            convergences.append(
+                f"SOLAR ARC TO ANGLE — {dp} {sa['aspect']} natal {np_.capitalize()} "
+                f"(orb {sa['orb']}°, applying). A concrete external milestone arrives within {timeframe} — "
+                f"identity shift (ASC) or career turning point (MC)."
+            )
+
+    # Multiple outer planets hitting the same natal point
+    outer_by_natal: dict[str, list[str]] = {}
+    for t in list(transits) + list(upcoming):
+        np_ = (t.get("natal_planet") or "").lower()
+        tp = (t.get("transiting_planet") or "").lower()
+        if tp in {"saturn", "uranus", "neptune", "pluto"}:
+            outer_by_natal.setdefault(np_, []).append(tp)
+    for np_, outers in outer_by_natal.items():
+        unique = list(dict.fromkeys(outers))
+        if len(unique) >= 2:
+            planet_label = np_.replace("_", " ").title()
+            outers_str = " + ".join(p.capitalize() for p in unique)
+            convergences.append(
+                f"MULTI-OUTER PRESSURE on natal {planet_label} — {outers_str} are simultaneously "
+                f"activating this point. Compound transformation of {planet_label}'s natal themes."
+            )
+
+    # Exact progressed aspects within 0.5° applying
+    for pa in progressed_aspects:
+        try:
+            orb = float(pa.get("orb", 999))
+        except (TypeError, ValueError):
+            continue
+        if orb <= 0.5 and pa.get("applying"):
+            pp = pa["progressed_planet"].replace("_", " ").title()
+            np_ = pa["natal_planet"].replace("_", " ").title()
+            convergences.append(
+                f"EXACT PROGRESSED ASPECT — Progressed {pp} {pa['aspect']} natal {np_} "
+                f"(orb {pa['orb']}°, applying). Within 0.5°: crystallizing RIGHT NOW as the most "
+                f"immediate psychological development."
+            )
+
+    return convergences
 
 
 def _format_yogas(yogas: list[dict]) -> str:
@@ -507,6 +648,7 @@ def build_prompt(state: "AstrologerState") -> str:
     chart = state.get("chart_data") or {}
     focus = state.get("report_focus") or "general life reading"
     additional = state.get("additional_info") or ""
+    convergences = _compute_convergences(chart, state) if chart else []
 
     if chart:
         placements = "\n".join([
@@ -541,6 +683,7 @@ def build_prompt(state: "AstrologerState") -> str:
         houses_section = "## House Cusps\n" + _format_houses(chart.get("houses") or {})
         aspects_section = "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or [])
         patterns_section = "## Aspect Patterns\n" + _format_aspect_patterns(chart.get("aspect_patterns") or [])
+        eclipse_section = "## Eclipse Sensitivity (±6 months, 3° orb)\n" + _format_eclipse_sensitivity(chart.get("eclipse_sensitivity") or [])
         transits_section = "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or [])
         upcoming_section = "## Upcoming Transits (next 90 days — outer planets only)\n" + _format_upcoming_transits(chart.get("upcoming_transits") or [])
         progressions_section = "## Secondary Progressions\n" + _format_progressions(chart.get("progressions"))
@@ -556,7 +699,7 @@ def build_prompt(state: "AstrologerState") -> str:
             lunar_phase_section, pof_section, asteroids_section, arabic_section, antiscia_section,
             stelliums_section, receptions_section,
             nodes_section, houses_section,
-            aspects_section, patterns_section, transits_section, upcoming_section,
+            aspects_section, patterns_section, eclipse_section, transits_section, upcoming_section,
             progressions_section, prog_aspects_section,
             solar_arcs_section, solar_arc_aspects_section,
             profection_section, firdaria_section, solar_return_section, vedic_section,
@@ -566,10 +709,20 @@ def build_prompt(state: "AstrologerState") -> str:
 
     additional_section = f"\n**Additional Context from User:** {additional}" if additional else ""
 
+    convergence_block = ""
+    if convergences:
+        convergence_block = (
+            "\n## ⚡ Convergence Intelligence (Pre-Computed — Highest Priority)\n"
+            "These findings were detected BEFORE you read the chart. They represent the "
+            "loudest signals across multiple timing layers and MUST be addressed explicitly in the report:\n\n"
+            + "\n\n".join(f"▶ {c}" for c in convergences)
+            + "\n"
+        )
+
     return f"""You are a master Western astrologer writing a personalized reading for {state['full_name']}.
 
 Only use the chart data provided — do NOT invent placements, transits, or aspects not listed.
-
+{convergence_block}
 ## Person Details
 - **Full Name:** {state['full_name']}
 - **Date of Birth:** {state['parsed_dob']}
@@ -614,13 +767,16 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 - Vedic overlay: sidereal positions (Lahiri ayanamsa, ~24°) show where planets fall in the Jyotish zodiac — use these to add depth when the tropical and sidereal agree, or to note where the two systems diverge; the Moon's nakshatra is the most significant Vedic datum (governs Vimshottari timing and instinctive nature); the Navamsha (D9) shows soul-level qualities and marriage/dharma themes. Use Vedic data as a cross-system confirmation — note resonances, do not create contradictions with the Western reading.
 - Vimshottari Dasha: the Mahadasha (major period, 6–20 years) sets the biographical backdrop; the Antardasha (sub-period, months to years) is the current texture within it. If the Mahadasha lord is the same as the Firdaria major lord, this is a profound convergence across both traditions — name it explicitly as the chart's single most dominant current theme. If the Dasha lord is also the profection lord of the year, all three timing systems point to the same planet — this is exceptional and must be flagged.
 - Vedic Yogas: Pancha Mahapurusha yogas (Ruchaka/Bhadra/Hamsa/Malavya/Shasha) are among the most powerful signatures in Jyotish — a planet in its own sign or exaltation in an angular house (Kendra) creates exceptional talent in that planet's domain; integrate this with the Western chart's dominant planets and aspect patterns. Gajakesari Yoga (Jupiter in Kendra from Moon) is one of the most auspicious and common yogas — name it as a source of resilience and wisdom. Raj Yogas (Kendra-Trikona lord links) indicate potential for authority and worldly success; Parivartana Raj Yoga (sign exchange) is particularly potent. Neecha Bhanga Raj Yoga (cancelled debilitation) is a life-transforming signature — the early struggle described by the debilitation becomes the very source of exceptional strength. Dhana Yogas indicate financial capacity. Multiple yogas in the same chart compound each other. Name any yogas in Section 1 (Overview) if they involve the Sun, Moon, or Ascendant lord, or in Section 5 (Key Themes) if they involve other planets.
+- Eclipse sensitivity: when a natal planet or angle is within 3° of a recent or upcoming eclipse, that planet/angle is eclipsed — its themes are both activated and destabilized for 6–12 months around the eclipse. A solar eclipse conjunct a natal planet = a reset and new chapter in that planet's domain; a lunar eclipse = an emotional culmination or release. Eclipse contacts to the ASC, MC, Sun, or Moon are life-level events. If multiple natal points are eclipsed simultaneously, the chart is in a period of accelerated change.
+- Progressed lunation cycle: the angle of the Progressed Moon ahead of the Progressed Sun reveals the psychological phase the person is living in. New Moon phase = a beginning, planting seeds with little visibility; Crescent = effort and resistance; First Quarter = crisis of action; Gibbous = refinement and preparation; Full Moon = culmination, revelation, visibility; Disseminating = sharing and teaching; Last Quarter = crisis of consciousness, questioning structures; Balsamic = release, completion, preparing for a new cycle. The "years to next Progressed New Moon" is a countdown to the next major psychological reset — if under 3 years, the current cycle is ending and new seeds are forming.
 - Fixed stars: only exact conjunctions (1° orb) matter — no other aspects. The 4 Royal Stars (Aldebaran, Regulus, Antares, Fomalhaut) conjunct a luminary or angle are life-defining signatures; Algol conjunct any personal planet or the Ascendant is the chart's most intense pressure point and must be named. Spica, Sirius, Vega near the Sun/Moon/Ascendant indicate distinctive gifts. Weave fixed stars into interpretation naturally — do not list them mechanically.
 
 ## Synthesis Protocol — Complete Mentally Before Writing
-1. Scan ALL predictive layers and identify the 2–3 themes that recur most across natal + transits + progressions + solar arcs + profection. These become the reading's spine.
-2. Find convergences: when 3+ predictive layers activate the same planet, house, or theme simultaneously, that is the chart's loudest current message — call it out explicitly.
-3. If the profection lord of the year is also being hit by a transit OR solar arc, flag it as doubly significant.
-4. Rank urgency: applying transit/arc within 0.5° (days–weeks) → within 1° (months) → within 3° (season) → progressions (years).
+1. READ THE CONVERGENCE INTELLIGENCE BLOCK FIRST. These pre-computed findings are the chart's loudest signals — build the reading around them.
+2. Check Eclipse Sensitivity: any eclipsed natal planet or angle is in an accelerated change period — weave this into sections 3 and 4.
+3. Note the Progressed Lunation phase and years-to-next-New-Moon — this sets the psychological chapter and determines whether the person is in a building, culminating, or releasing season of life.
+4. Scan all remaining predictive layers and identify any 2–3 additional themes not already captured by the convergences.
+5. Rank urgency: convergence-flagged planets (highest) → eclipsed points → applying transit/arc within 0.5° (days–weeks) → within 1° (months) → within 3° (season) → progressions (years).
 
 ## Report Instructions
 Write in warm, direct, personal language — speak TO this person, not ABOUT them. Every paragraph must name at least one specific planet, sign, degree, or house. Do not list placements — interpret them. Do not use hedging phrases like "might suggest" or "could indicate" — make clear statements grounded in the data.
@@ -719,7 +875,9 @@ def _build_followup_messages(
 def answer_followup(state: "AstrologerState", chat_history: list[dict], question: str) -> str:
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     messages = _build_followup_messages(state, chat_history, question)
-    response = client.chat.completions.create(model="gpt-4o", max_tokens=1024, messages=messages)
+    response = client.chat.completions.create(
+        model="gpt-4o", max_tokens=1024, temperature=0.7, messages=messages
+    )
     return response.choices[0].message.content
 
 
@@ -728,7 +886,7 @@ def answer_followup_stream(state: "AstrologerState", chat_history: list[dict], q
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     messages = _build_followup_messages(state, chat_history, question)
     with client.chat.completions.create(
-        model="gpt-4o", max_tokens=1024, stream=True, messages=messages
+        model="gpt-4o", max_tokens=1024, temperature=0.7, stream=True, messages=messages
     ) as stream:
         for chunk in stream:
             content = chunk.choices[0].delta.content
@@ -897,6 +1055,7 @@ def generate_synastry_report(
     response = client.chat.completions.create(
         model="gpt-4o",
         max_tokens=3000,
+        temperature=0.7,
         messages=[
             {"role": "system", "content": _SYNASTRY_SYSTEM},
             {"role": "user", "content": prompt},
@@ -916,6 +1075,7 @@ def generate_synastry_report_stream(
     with client.chat.completions.create(
         model="gpt-4o",
         max_tokens=3000,
+        temperature=0.7,
         stream=True,
         messages=[
             {"role": "system", "content": _SYNASTRY_SYSTEM},
@@ -954,7 +1114,7 @@ def answer_synastry_followup_stream(
         {"role": "user", "content": question},
     ]
     with client.chat.completions.create(
-        model="gpt-4o", max_tokens=1024, stream=True, messages=messages
+        model="gpt-4o", max_tokens=1024, temperature=0.7, stream=True, messages=messages
     ) as stream:
         for chunk in stream:
             content = chunk.choices[0].delta.content
@@ -979,6 +1139,7 @@ def generate_report(state: "AstrologerState") -> str:
     response = client.chat.completions.create(
         model="gpt-4o",
         max_tokens=4096,
+        temperature=0.7,
         messages=[
             {"role": "system", "content": _REPORT_SYSTEM},
             {"role": "user", "content": build_prompt(state)},
@@ -993,6 +1154,7 @@ def generate_report_stream(state: "AstrologerState"):
     with client.chat.completions.create(
         model="gpt-4o",
         max_tokens=4096,
+        temperature=0.7,
         stream=True,
         messages=[
             {"role": "system", "content": _REPORT_SYSTEM},

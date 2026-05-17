@@ -118,6 +118,7 @@ def compute_astro(state: "AstrologerState") -> dict:
             compute_solar_return, compute_firdaria,
             compute_vedic,
             compute_upcoming_transits,
+            compute_eclipse_sensitivity,
             generate_chart_svg, generate_transit_svg,
         )
 
@@ -257,6 +258,19 @@ def compute_astro(state: "AstrologerState") -> dict:
             )
         except Exception:
             chart["firdaria"] = None
+
+        try:
+            current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
+            chart["eclipse_sensitivity"] = compute_eclipse_sensitivity(
+                chart=chart,
+                current_year=current_dt.year,
+                current_month=current_dt.month,
+                current_day=current_dt.day,
+                current_hour=current_dt.hour,
+                current_minute=current_dt.minute,
+            )
+        except Exception:
+            chart["eclipse_sensitivity"] = []
 
         try:
             chart["chart_svg"] = generate_chart_svg(
