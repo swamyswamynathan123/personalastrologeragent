@@ -39,8 +39,8 @@ graph TB
     end
 
     subgraph LLM["LLM Layer (llm/)"]
-        RP[report.py\nprompt builder]:::llmNode
-        OAI[OpenAI GPT-4o\nstreaming]:::externalNode
+        RP[report.py\n3-call streaming pipeline]:::llmNode
+        OAI[OpenAI GPT-4o\n3x streaming calls]:::externalNode
     end
 
     UI -- "form submit" --> PG
@@ -402,32 +402,41 @@ flowchart TD
 
 ## LLM Prompt Architecture
 
+`generate_report_stream` makes **3 sequential streaming API calls**, each covering a distinct section group. A `_person_header` helper provides the shared person-details block to all three prompts.
+
 ```mermaid
 flowchart TD
     classDef inputNode fill:#1e3a5f,stroke:#4a6fa5,color:#d4e6f1
     classDef llmNode fill:#4a3000,stroke:#c8860a,color:#ffd580
     classDef outputNode fill:#1a3a2a,stroke:#2d7a4f,color:#a8d8b8
     classDef sectionNode fill:#2d1b4e,stroke:#8866cc,color:#d4bfff
+    classDef cacheNode fill:#1a2a1a,stroke:#3a6a3a,color:#a8c8a8
 
     STATE[AstrologerState\nchart_data dict]:::inputNode
 
-    STATE --> BP[build_prompt]:::llmNode
+    STATE --> CACHE{cache hit?}:::cacheNode
+    CACHE -- yes --> CACHED[yield cached text]:::outputNode
 
-    BP --> PD[Person Details\nname · DOB · location\nbirth time · confidence\nhouse system · focus]:::sectionNode
-    BP --> PLAC[Natal Placements\nall planets + angles\nwith dignity + retrograde]:::sectionNode
-    BP --> SPEC[20+ Formatted Sections\ntransits · progressions · solar arcs\nfirdaria · profection · vedic\nasteroids · fixed stars etc.]:::sectionNode
-    BP --> RULES[Interpretation Rules\ndignity · sect · timing priority\nastiscia · yoga meanings]:::sectionNode
-    BP --> SYNTH[Synthesis Protocol\nconvergence detection\nurgency ranking]:::sectionNode
-    BP --> INST[Report Instructions\n7 sections defined\nPersonal Overview through\nFavorable Timing]:::sectionNode
+    CACHE -- no --> PH[_person_header\nname · DOB · location\nbirth time · confidence\nhouse system]:::sectionNode
 
-    PD & PLAC & SPEC & RULES & SYNTH & INST --> MSG[messages list\nsystem + user]:::llmNode
+    PH --> P1[_build_identity_prompt\nSections 1–3\nnatal placements · progressions\nprogressed lunation · Chiron\naspect patterns · nodes]:::sectionNode
+    PH --> P2[_build_timing_prompt\nSections 4–7\nfirdaria · dasha · profection\ntransits · solar arcs · eclipses\nkey themes · practical guidance\nfavorable timing]:::sectionNode
+    PH --> P3[_build_advanced_prompt\nSections 8–10\ntop 5 timing table\nVedic full reading\noptional focus deep dive]:::sectionNode
 
-    MSG --> STREAM[generate_report_stream\nyields text chunks\nused in app.py]:::llmNode
-    MSG --> BLOCK[generate_report\nblocking — tests only]:::llmNode
+    P1 --> C1[Call 1\ngpt-4o stream=True\nmax_tokens=4096\n~10–15s]:::llmNode
+    P2 --> C2[Call 2\ngpt-4o stream=True\nmax_tokens=4096\n~10–15s]:::llmNode
+    P3 --> C3[Call 3\ngpt-4o stream=True\nmax_tokens=4096\n~10–15s]:::llmNode
 
-    STREAM --> WS[st.write_stream\nlive render]:::outputNode
-    WS --> STORED[report_result\nsession state]:::outputNode
+    C1 -- "tokens" --> WS[st.write_stream\nlive render\nPart 1 visible\nwhile Parts 2–3 pending]:::outputNode
+    C2 -- "tokens" --> WS
+    C3 -- "tokens" --> WS
+
+    WS --> FULL[full_text concatenated\n3 parts + 2 separators]:::llmNode
+    FULL --> WRITE[write to SQLite cache]:::cacheNode
+    FULL --> STORED[report_result\nsession state]:::outputNode
     STORED --> CARD[styled report-card div\nmarkdown → HTML\nvia python-markdown]:::outputNode
+
+    BLOCK[generate_report\nblocking — tests only\nsingle call]:::llmNode
 
     STORED --> FU[answer_followup_stream\nreport prepended as\nassistant turn\nchat history appended]:::llmNode
     FU --> CHAT[st.chat_message\nstreaming reply]:::outputNode
@@ -493,12 +502,24 @@ sequenceDiagram
 
     Note over SS: rerun → enters _prepared_state branch
 
-    Note over SS,OAI: Stage 2 — Report streaming (~20–40s)
+    Note over SS,OAI: Stage 2 — Report streaming (3 calls, ~30–45s total)
     SS->>Stream: write_stream(generate_report_stream)
+
+    Note over Stream,OAI: Call 1 — Identity & Soul (Sections 1–3)
     Stream->>OAI: POST /chat/completions\nmax_tokens=4096, stream=True
     Note over OAI: ~1–2s time to first token
-    OAI-->>Stream: token chunks (~20–40s total)
-    Stream-->>User: live text render\n(markdown natively)
+    OAI-->>Stream: token chunks (~10–15s)
+    Stream-->>User: Part 1 visible live
+
+    Note over Stream,OAI: Call 2 — Cosmic Timing (Sections 4–7)
+    Stream->>OAI: POST /chat/completions\nmax_tokens=4096, stream=True
+    OAI-->>Stream: token chunks (~10–15s)
+    Stream-->>User: Part 2 appended live
+
+    Note over Stream,OAI: Call 3 — Advanced Windows & Vedic (Sections 8–10)
+    Stream->>OAI: POST /chat/completions\nmax_tokens=4096, stream=True
+    OAI-->>Stream: token chunks (~10–15s)
+    Stream-->>User: Part 3 appended live
 
     alt stream succeeds
         Stream->>SS: report_result = {chart + report_text}

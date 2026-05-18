@@ -88,15 +88,28 @@ Uses the OpenAI Python SDK (`gpt-4o`). Key functions:
 
 | Function | Description |
 |---|---|
-| `build_prompt(state)` | Builds the full natal reading prompt from all chart data |
-| `generate_report(state)` | Blocking report generation (used in integration tests) |
-| `generate_report_stream(state)` | Generator yielding text chunks; used with `st.write_stream()` |
+| `_person_header(state)` | Helper returning the person-details block shared across all 3 prompts |
+| `_build_identity_prompt(state)` | Sections 1–3 (Personal Overview, Life Direction, Current Phase) — natal data + progressions |
+| `_build_timing_prompt(state)` | Sections 4–7 (Cosmic Climate, Key Themes, Practical Guidance, Favorable Timing) — transits, firdaria, profection, solar arcs |
+| `_build_advanced_prompt(state)` | Sections 8–10 (Top 5 Windows table, Vedic Full Reading, optional Focus Deep Dive) — upcoming passes, vedic, optional focus |
+| `generate_report(state)` | Blocking report generation (used in integration tests); single call |
+| `generate_report_stream(state)` | Generator making **3 sequential streaming API calls** (identity → timing → advanced), yielding text chunks live; used with `st.write_stream()`. Checks cache before calling; writes to cache on completion. |
 | `generate_synastry_report(...)` | Blocking synastry report |
-| `generate_synastry_report_stream(...)` | Streaming synastry report |
+| `generate_synastry_report_stream(...)` | Streaming synastry report (single call) |
 | `answer_followup_stream(state, history, question)` | Streaming follow-up for natal chart questions |
 | `answer_synastry_followup_stream(...)` | Streaming follow-up for synastry questions |
 
 `_REPORT_SYSTEM` and `_SYNASTRY_SYSTEM` are module-level constants shared by blocking and streaming variants of each report type.
+
+**3-call streaming pipeline** — `generate_report_stream` iterates over:
+```python
+_calls = [
+    (_build_identity_prompt(state),  4096, "Sections 1–3"),
+    (_build_timing_prompt(state),    4096, "Sections 4–7"),
+    (_build_advanced_prompt(state),  4096, "Sections 8–10"),
+]
+```
+Each call uses `with client.chat.completions.create(..., stream=True) as stream` and yields `chunk.choices[0].delta.content` for non-None deltas. A `"---"` separator is yielded between calls. The full concatenated text is written to the SQLite cache on completion.
 
 ### Streamlit UI — `app.py`
 

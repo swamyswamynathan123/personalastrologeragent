@@ -7,9 +7,18 @@ A full-featured astrological reading app powered by LangGraph, OpenAI GPT-4o, an
 **Natal Reading**
 - Validates all birth inputs and prompts for corrections when data is missing or malformed
 - Computes a comprehensive natal chart via kerykeion + swisseph
-- Streams the GPT-4o report token-by-token for immediate feedback
+- Streams the GPT-4o report live in 3 focused parts (identity & soul → cosmic timing → advanced windows & Vedic)
 - Follow-up chat retains full chart context across multiple questions
 - Export report as Markdown or HTML (with embedded SVG chart wheel)
+- Report is cached in SQLite so reloads are instant
+
+**Transit Timeline**
+- Gantt-style chart showing when each outer planet forms a major aspect to a natal point over the next 12 months
+- Day-by-day transit calendar with colour-coded aspect types (harmonious / challenging / neutral)
+
+**Forecasts**
+- Four AI-generated forward-looking reports: Weekly (7 days), Monthly (30 days), Yearly (12 months), Overall (2–3 years)
+- Each forecast streams live from the current transit and timing state
 
 **Synastry / Compatibility**
 - Computes inter-chart aspects, house overlays, and composite chart for two people
@@ -59,7 +68,7 @@ graph (full pipeline — used in tests):
   ... same as above, then → generate_report_node → END
 ```
 
-`app.py` uses `prepare_graph` on form submission (spinner, ~15s), then streams the report via `generate_report_stream()` with `st.write_stream()`. After streaming completes, `st.rerun()` re-renders the page in the styled cached branch.
+`app.py` uses `prepare_graph` on form submission (spinner, ~15–25s), then streams the report via `generate_report_stream()` with `st.write_stream()`. The stream makes **3 sequential GPT-4o calls** — Part 1 (identity & soul, ~10–15s), Part 2 (cosmic timing, ~10–15s), Part 3 (advanced windows & Vedic, ~10–15s) — yielding tokens live between each call. After streaming completes, `st.rerun()` re-renders the page in the styled cached branch.
 
 ## Requirements
 
@@ -69,37 +78,29 @@ graph (full pipeline — used in tests):
 
 ## Setup
 
-1. Clone the repository and create a virtual environment:
+1. Clone the repository.
 
-   ```bash
-   python -m venv venv
-   ```
-
-2. Activate the virtualenv and install dependencies:
-
-   ```bash
-   venv\Scripts\activate        # Windows
-   source venv/bin/activate     # macOS/Linux
-
-   pip install -r requirements.txt
-   ```
-
-3. Copy `.env.example` to `.env` and add your key:
+2. Copy `.env.example` to `.env` and add your key:
 
    ```
    OPENAI_API_KEY=sk-...
    ```
 
+3. Run the app — the launcher handles everything else automatically.
+
 ## Running the App
 
-**Windows:**
+**Windows (recommended):**
 ```bat
 run.bat
 ```
+`run.bat` auto-creates the virtual environment and installs dependencies on first run, then launches Streamlit. Subsequent runs skip setup and start immediately.
 
 **macOS/Linux:**
 ```bash
+python -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
 streamlit run app.py
 ```
 
@@ -126,13 +127,17 @@ pytest tests/ -v -m integration
 ├── astro/
 │   └── compute.py      # kerykeion + swisseph chart computation (all techniques)
 ├── llm/
-│   └── report.py       # Prompt building, streaming/blocking report and synastry generation
+│   └── report.py       # 3-call streaming pipeline, prompt builders, synastry, follow-up
 ├── tests/
 │   ├── test_validators.py
 │   ├── test_nodes.py
-│   └── test_graph.py
-├── app.py              # Streamlit UI (sidebar form, natal tab, synastry tab)
-├── run.bat             # Windows launcher
+│   ├── test_graph.py
+│   └── test_pipeline.py  # LLM streaming pipeline tests
+├── cache/              # SQLite geocoding cache (kerykeion, auto-created)
+├── storage/            # Saved charts and readings (auto-created)
+├── app.py              # Streamlit UI (sidebar form, natal, transit calendar, synastry, forecasts tabs)
+├── run.bat             # Windows launcher — auto-creates venv and installs deps on first run
+├── USERS.md            # End-user documentation
 └── requirements.txt
 ```
 
@@ -145,5 +150,10 @@ pytest tests/ -v -m integration
 | Asteroid / ephemeris data | pyswisseph |
 | LLM | OpenAI GPT-4o |
 | UI | Streamlit |
+| Transit timeline chart | Plotly |
 | Timezone handling | pytz |
 | Markdown → HTML export | markdown |
+
+## Documentation
+
+See [USERS.md](USERS.md) for the full end-user guide covering birth details, house systems, reading sections, saved charts, the transit calendar, compatibility, forecasts, follow-up chat, and a glossary.
