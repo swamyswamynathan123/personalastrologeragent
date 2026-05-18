@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from agent.graph import graph, prepare_graph
 from agent.state import AstrologerState
 from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report_stream, answer_synastry_followup_stream, generate_weekly_forecast_stream, generate_monthly_forecast_stream, generate_yearly_forecast_stream
-from astro.compute import compute_chart, compute_synastry, compute_transit_calendar
+from astro.compute import compute_chart, compute_synastry, compute_transit_calendar, compute_daily_sky
 from cache.report_cache import purge_expired
 from storage.db import init_db, save_natal, save_synastry, list_charts, load_chart, delete_chart
 
@@ -305,6 +305,10 @@ if "_save_toast" not in st.session_state:
     st.session_state._save_toast = None
 if "_pending_load" not in st.session_state:
     st.session_state._pending_load = None
+if "_daily_sky" not in st.session_state:
+    st.session_state._daily_sky = None
+if "_daily_sky_date" not in st.session_state:
+    st.session_state._daily_sky_date = None
 if "_weekly_forecast" not in st.session_state:
     st.session_state._weekly_forecast = None
 if "_weekly_forecast_date" not in st.session_state:
@@ -479,6 +483,64 @@ with st.sidebar:
                         delete_chart(_c["id"])
                         st.rerun()
 
+    # ── Today's Sky widget ────────────────────────────────────────────────────
+    _sky_result = st.session_state.report_result
+    if _sky_result and _sky_result.get("chart_data"):
+        _today_date = date.today().isoformat()
+        if st.session_state._daily_sky_date != _today_date or st.session_state._daily_sky is None:
+            try:
+                _sky = compute_daily_sky(
+                    natal_chart=_sky_result["chart_data"],
+                    current_year=date.today().year,
+                    current_month=date.today().month,
+                    current_day=date.today().day,
+                )
+                st.session_state._daily_sky = _sky
+                st.session_state._daily_sky_date = _today_date
+            except Exception:
+                st.session_state._daily_sky = {}
+
+        _sky = st.session_state._daily_sky or {}
+        if _sky:
+            st.divider()
+            st.markdown("### 🔭 Today's Sky")
+
+            # Moon
+            _moon_sign = _sky.get("moon_sign") or "—"
+            _moon_deg = _sky.get("moon_degree", "")
+            _voc_badge = " · *void-of-course*" if _sky.get("moon_voc") else ""
+            st.markdown(f"🌙 **Moon in {_moon_sign}** {_moon_deg}°{_voc_badge}")
+
+            # Closest active transit
+            _ct = _sky.get("closest_transit")
+            if _ct:
+                st.markdown(f"⚡ {_ct['summary']}")
+
+            # Retrograde planets
+            _retro = _sky.get("retrograde_planets") or []
+            if _retro:
+                _retro_str = ", ".join(
+                    f"{r['planet'].title()} Rx in {r['sign']}" for r in _retro
+                )
+                st.caption(f"Retrograde: {_retro_str}")
+
+    # ── Chart at a Glance (Sun / Moon / ASC) ─────────────────────────────────
+    _glance_result = st.session_state.report_result
+    if _glance_result and _glance_result.get("chart_data"):
+        _gcd = _glance_result["chart_data"]
+        _g_sun = (_gcd.get("sun") or {})
+        _g_moon = (_gcd.get("moon") or {})
+        _g_asc = (_gcd.get("ascendant") or {})
+        if _g_sun.get("sign") or _g_moon.get("sign") or _g_asc.get("sign"):
+            st.divider()
+            st.markdown("### 🌟 Chart at a Glance")
+            if _g_sun.get("sign"):
+                st.caption(f"☉ Sun · {_g_sun['sign']} {_g_sun.get('position', '')}°")
+            if _g_moon.get("sign"):
+                st.caption(f"☽ Moon · {_g_moon['sign']} {_g_moon.get('position', '')}°")
+            if _g_asc.get("sign"):
+                st.caption(f"↑ ASC · {_g_asc['sign']} {_g_asc.get('position', '')}°")
+
 # --- Form submission: validate + compute chart, then stream report in the tab ---
 if submitted:
     st.session_state.report_result = None
@@ -652,8 +714,25 @@ with natal_tab:
             st.caption(f"Focus: {result['report_focus']}")
         st.divider()
 
-        # Chart wheels (natal + transit overlay)
+        # Chart wheels — regenerate SVGs if missing (e.g. loaded from saved charts where SVGs are stripped)
         _cd1 = result.get("chart_data") or {}
+        if not _cd1.get("chart_svg") and _cd1.get("_natal_lat") and result.get("parsed_birth_datetime"):
+            try:
+                from astro.compute import generate_chart_svg as _gen_svg
+                _bdt = datetime.fromisoformat(result["parsed_birth_datetime"])
+                _regen_svg = _gen_svg(
+                    full_name=result.get("full_name", ""),
+                    birth_year=_bdt.year, birth_month=_bdt.month, birth_day=_bdt.day,
+                    birth_hour=_bdt.hour, birth_minute=_bdt.minute,
+                    city="", nation="", tz_str=result.get("birth_time_timezone") or "UTC",
+                    house_system=result.get("house_system") or "Placidus",
+                    lat=_cd1["_natal_lat"], lng=_cd1["_natal_lng"],
+                )
+                if _regen_svg:
+                    _cd1 = {**_cd1, "chart_svg": _regen_svg}
+                    st.session_state.report_result = {**result, "chart_data": _cd1}
+            except Exception:
+                pass
         chart_svg = _cd1.get("chart_svg") or ""
         vedic_svg = _cd1.get("vedic_svg") or ""
         transit_svg = _cd1.get("transit_svg") or ""

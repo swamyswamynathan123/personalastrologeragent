@@ -3716,3 +3716,141 @@ def compute_chart(
         chart["dispositor_tree"] = None
 
     return chart
+
+
+_TRANSIT_PLANET_NAMES = {
+    "jupiter": "Jupiter", "saturn": "Saturn",
+    "uranus": "Uranus", "neptune": "Neptune", "pluto": "Pluto",
+}
+
+_NATAL_POINT_THEMES = {
+    "sun": "identity & purpose",
+    "moon": "emotions & home",
+    "mercury": "communication & thinking",
+    "venus": "relationships & values",
+    "mars": "drive & action",
+    "jupiter": "growth & expansion",
+    "saturn": "structure & discipline",
+    "uranus": "change & disruption",
+    "neptune": "dreams & illusions",
+    "pluto": "transformation",
+    "ascendant": "self-presentation",
+    "midheaven": "career & reputation",
+    "north_node": "life direction",
+    "chiron": "healing & wounds",
+}
+
+_ASPECT_TONE = {
+    "Conjunction": "fusion of energies",
+    "Sextile": "gentle opportunity",
+    "Square": "friction and pressure",
+    "Trine": "ease and flow",
+    "Opposition": "tension and awareness",
+}
+
+
+def compute_daily_sky(
+    natal_chart: dict,
+    current_year: int,
+    current_month: int,
+    current_day: int,
+    current_hour: int = 12,
+    current_minute: int = 0,
+) -> dict:
+    """Return today's personalised sky snapshot: Moon, retrograde planets, closest active transit."""
+    lat = natal_chart.get("_natal_lat") or 0.0
+    lng = natal_chart.get("_natal_lng") or 0.0
+
+    try:
+        sky = AstrologicalSubject(
+            name="Today",
+            year=current_year, month=current_month, day=current_day,
+            hour=current_hour, minute=current_minute,
+            lat=lat, lng=lng, tz_str="UTC", online=False,
+        )
+    except Exception:
+        return {}
+
+    result: dict = {}
+
+    # Moon sign, degree, void-of-course
+    moon_data = _safe_planet(sky, "moon")
+    if moon_data:
+        result["moon_sign"] = moon_data["sign"]
+        result["moon_degree"] = round(moon_data["position"], 1)
+        moon_abs = moon_data.get("abs_pos", 0.0)
+        sign_end_abs = (int(moon_abs / 30) + 1) * 30.0
+        degrees_remaining = sign_end_abs - moon_abs
+        voc = True
+        for p_name in ["sun", "mercury", "venus", "mars", "jupiter", "saturn"]:
+            if not voc:
+                break
+            pd = _safe_planet(sky, p_name)
+            if not pd:
+                continue
+            p_abs = pd.get("abs_pos", 0.0)
+            for _, angle, max_orb in _MAJOR_ASPECTS:
+                for sign_dir in (1, -1):
+                    target = (p_abs + sign_dir * angle) % 360
+                    diff_forward = (target - moon_abs + 360) % 360
+                    if diff_forward <= degrees_remaining + max_orb:
+                        voc = False
+                        break
+                if not voc:
+                    break
+        result["moon_voc"] = voc
+    else:
+        result["moon_sign"] = None
+        result["moon_voc"] = False
+
+    # Retrograde planets
+    retro = []
+    for p_name in _PLANETS[2:]:  # skip sun, moon
+        pd = _safe_planet(sky, p_name)
+        if pd and pd.get("retrograde"):
+            retro.append({"planet": p_name, "sign": pd["sign"]})
+    result["retrograde_planets"] = retro
+
+    # Closest applying outer-planet transit to any natal point
+    outer = ["jupiter", "saturn", "uranus", "neptune", "pluto"]
+    natal_points = list(_PLANETS) + ["ascendant", "midheaven", "north_node", "chiron"]
+    best = None
+    best_orb = 999.0
+
+    for t_name in outer:
+        td = _safe_planet(sky, t_name)
+        if not td:
+            continue
+        t_abs = td.get("abs_pos", 0.0)
+        for n_name in natal_points:
+            nd = natal_chart.get(n_name)
+            if not nd or not isinstance(nd, dict):
+                continue
+            n_abs = nd.get("abs_pos")
+            if n_abs is None:
+                continue
+            for asp_name, angle, max_orb in _MAJOR_ASPECTS:
+                diff = abs((t_abs - n_abs + 180) % 360 - 180)
+                orb = abs(diff - angle)
+                if orb <= max_orb and orb < best_orb:
+                    best_orb = orb
+                    theme = _NATAL_POINT_THEMES.get(n_name, n_name)
+                    tone = _ASPECT_TONE.get(asp_name, asp_name.lower())
+                    retro_mark = " Rx" if td.get("retrograde") else ""
+                    best = {
+                        "transit_planet": t_name,
+                        "transit_sign": td["sign"],
+                        "transit_retrograde": td.get("retrograde", False),
+                        "aspect": asp_name,
+                        "natal_point": n_name,
+                        "natal_sign": nd.get("sign"),
+                        "orb": round(orb, 2),
+                        "summary": (
+                            f"{_TRANSIT_PLANET_NAMES[t_name]}{retro_mark} {asp_name.lower()} "
+                            f"your {n_name.replace('_', ' ').title()} "
+                            f"({round(orb, 1)}° orb) — {tone} around {theme}"
+                        ),
+                    }
+
+    result["closest_transit"] = best
+    return result
