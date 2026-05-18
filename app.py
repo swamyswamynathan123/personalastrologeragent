@@ -1114,7 +1114,7 @@ def _render_transit_timeline(transit_passes: list[dict]) -> None:
         yaxis=dict(gridcolor="#2e2e4e", autorange="reversed"),
         barmode="overlay",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 _ASPECT_NATURE = {
