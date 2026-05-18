@@ -90,19 +90,27 @@ html, body, [class*="css"] {
 
 /* ── Help / tooltip icons ────────────────────────────────────────── */
 [data-testid="stTooltipIcon"] {
-    color: #9977cc !important;
     opacity: 1 !important;
 }
-[data-testid="stTooltipIcon"] svg {
+[data-testid="stTooltipIcon"] svg circle {
     fill: #9977cc !important;
     stroke: #9977cc !important;
 }
-[data-testid="stTooltipIcon"]:hover {
-    color: #c8a8f8 !important;
+[data-testid="stTooltipIcon"] svg path,
+[data-testid="stTooltipIcon"] svg line,
+[data-testid="stTooltipIcon"] svg rect {
+    fill: #ffffff !important;
+    stroke: #ffffff !important;
 }
-[data-testid="stTooltipIcon"]:hover svg {
+[data-testid="stTooltipIcon"]:hover svg circle {
     fill: #c8a8f8 !important;
     stroke: #c8a8f8 !important;
+}
+[data-testid="stTooltipIcon"]:hover svg path,
+[data-testid="stTooltipIcon"]:hover svg line,
+[data-testid="stTooltipIcon"]:hover svg rect {
+    fill: #ffffff !important;
+    stroke: #ffffff !important;
 }
 
 /* ── Tooltip popup content ───────────────────────────────────────── */
