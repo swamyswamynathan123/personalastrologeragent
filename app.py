@@ -263,6 +263,30 @@ hr { border-color: #2e2e4e; }
     color: #d4bfff !important;
 }
 
+/* ── Pills (report focus) ────────────────────────────────────────── */
+[data-testid="stSidebar"] [data-testid="stPills"] button,
+[data-testid="stSidebar"] [data-baseweb="button-group"] button {
+    background: #1e1e38 !important;
+    border: 1px solid #3a3a60 !important;
+    color: #c8b8e8 !important;
+    border-radius: 20px !important;
+    font-family: "Georgia", serif;
+    font-size: 0.78rem;
+    transition: background 0.2s, border-color 0.2s;
+}
+[data-testid="stSidebar"] [data-testid="stPills"] button:hover,
+[data-testid="stSidebar"] [data-baseweb="button-group"] button:hover {
+    background: #2a2a50 !important;
+    border-color: #8866cc !important;
+    color: #e8d8ff !important;
+}
+[data-testid="stSidebar"] [data-testid="stPills"] button[aria-pressed="true"],
+[data-testid="stSidebar"] [data-baseweb="button-group"] button[aria-checked="true"] {
+    background: linear-gradient(135deg, #6644aa 0%, #9966cc 100%) !important;
+    border-color: #9966cc !important;
+    color: #fff !important;
+}
+
 /* ── Placeholder panel ───────────────────────────────────────────── */
 .placeholder-panel {
     display: flex;
