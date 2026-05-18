@@ -38,7 +38,7 @@ html, body, [class*="css"] {
     background-image:
         radial-gradient(ellipse at 15% 15%, rgba(80,50,140,0.18) 0%, transparent 55%),
         radial-gradient(ellipse at 85% 85%, rgba(40,25,90,0.22) 0%, transparent 55%);
-    color: #e0d8cc;
+    color: #f0ebe3;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────── */
@@ -53,7 +53,7 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] .stDateInput label,
 [data-testid="stSidebar"] .stTimeInput label,
 [data-testid="stSidebar"] .stTextArea label {
-    color: #8877aa !important;
+    color: #aa99cc !important;
     font-family: "Raleway", sans-serif !important;
     font-size: 0.7rem;
     font-weight: 600;
@@ -65,7 +65,7 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] textarea {
     background-color: #10102a !important;
     border: 1px solid #2a2a50 !important;
-    color: #e0d8cc !important;
+    color: #f0ebe3 !important;
     border-radius: 6px !important;
     font-family: "Lora", serif !important;
     font-size: 0.88rem !important;
@@ -86,7 +86,7 @@ html, body, [class*="css"] {
     font-family: "Raleway", sans-serif !important;
     font-size: 0.68rem !important;
     font-weight: 600 !important;
-    color: #5d5585 !important;
+    color: #8877aa !important;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     margin: 1.3rem 0 0.35rem !important;
@@ -97,13 +97,13 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] li,
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span {
-    color: #b8b0a4 !important;
+    color: #d4ccc4 !important;
     font-size: 0.86rem;
 }
 [data-testid="stSidebar"] small,
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
-    color: #5d5585 !important;
+    color: #8877aa !important;
     font-family: "Raleway", sans-serif !important;
 }
 
@@ -136,7 +136,7 @@ div[role="tooltip"], div[role="tooltip"] *,
 div[data-baseweb="tooltip"], div[data-baseweb="tooltip"] *,
 div[data-baseweb="popover"], div[data-baseweb="popover"] * {
     background-color: #14142e !important;
-    color: #d0c8c0 !important;
+    color: #ece8e0 !important;
     border-color: #30305a !important;
     font-family: "Lora", serif !important;
     font-size: 0.84rem !important;
@@ -174,7 +174,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
 [data-testid="baseButton-secondary"] {
     background: transparent !important;
     border: 1px solid #2a2a50 !important;
-    color: #8877aa !important;
+    color: #b0a0cc !important;
     font-family: "Raleway", sans-serif;
     font-size: 0.8rem;
     letter-spacing: 0.04em;
@@ -185,7 +185,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
 [data-testid="baseButton-secondary"]:hover {
     background: #14143a !important;
     border-color: #5533aa !important;
-    color: #c8b0f0 !important;
+    color: #ddd0ff !important;
 }
 
 /* ── Page header ─────────────────────────────────────────────────── */
@@ -208,7 +208,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
 }
 .page-header p {
     margin: 0.5rem 0 0;
-    color: #6655aa;
+    color: #9988cc;
     font-style: italic;
     font-size: 0.92rem;
     letter-spacing: 0.02em;
@@ -240,7 +240,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
     font-weight: 600;
     letter-spacing: 0.13em;
     text-transform: uppercase;
-    color: #4d4475;
+    color: #8877aa;
     margin-bottom: 0.22rem;
 }
 .bdc-value {
@@ -248,7 +248,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
     font-family: "Lora", serif;
     font-size: 0.92rem;
     font-weight: 600;
-    color: #c8b8e8;
+    color: #e0d4fc;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -257,7 +257,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
     display: block;
     font-family: "Raleway", sans-serif;
     font-size: 0.68rem;
-    color: #4d4475;
+    color: #8877aa;
     margin-top: 0.12rem;
     font-style: italic;
 }
@@ -270,7 +270,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
     padding: 2.4rem 2.8rem;
     margin-bottom: 1.6rem;
     line-height: 1.95;
-    color: #d4ccc4;
+    color: #ede8e0;
     box-shadow: 0 8px 48px rgba(50,30,110,0.2);
 }
 .report-card h1,
@@ -278,17 +278,17 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
 .report-card h3,
 .report-card h4 {
     font-family: "Cinzel", serif;
-    color: #a888d8;
+    color: #cca8ff;
     font-size: 0.84rem;
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     border: none;
-    border-left: 3px solid #5533aa;
+    border-left: 3px solid #7744cc;
     padding: 0.25rem 0 0.25rem 0.85rem;
     margin-top: 2.2rem;
     margin-bottom: 0.9rem;
-    background: linear-gradient(90deg, rgba(85,51,170,0.08) 0%, transparent 100%);
+    background: linear-gradient(90deg, rgba(100,60,200,0.1) 0%, transparent 100%);
     border-radius: 0 4px 4px 0;
 }
 .report-card h1:first-child,
@@ -296,10 +296,10 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
 .report-card h3:first-child,
 .report-card h4:first-child { margin-top: 0; }
 .report-card hr { display: none; }
-.report-card strong { color: #b8a8d8; }
-.report-card em { color: #a898c8; }
+.report-card strong { color: #ddd0ff; }
+.report-card em { color: #c8bce8; }
 .report-card li { margin-bottom: 0.45rem; padding-left: 0.2rem; }
-.report-card li::marker { color: #5533aa; }
+.report-card li::marker { color: #8855cc; }
 .report-card p { margin-bottom: 0.95rem; }
 
 /* ── Chart SVG wrapper ───────────────────────────────────────────── */
@@ -320,14 +320,14 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
     padding: 0.85rem 1rem;
 }
 [data-testid="stMetricLabel"] {
-    color: #4d4475 !important;
+    color: #8877aa !important;
     font-family: "Raleway", sans-serif !important;
     font-size: 0.65rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
 }
 [data-testid="stMetricValue"] {
-    color: #c0b0e0 !important;
+    color: #ddd0ff !important;
     font-family: "Lora", serif !important;
     font-size: 0.95rem;
 }
@@ -338,18 +338,18 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
     border: 1px solid #1e1e3a;
     border-radius: 10px;
     margin-bottom: 0.6rem;
-    color: #d4ccc4 !important;
+    color: #ede8e0 !important;
 }
 [data-testid="stChatMessage"] p,
 [data-testid="stChatMessage"] li,
 [data-testid="stChatMessage"] span,
-[data-testid="stChatMessage"] div { color: #d4ccc4 !important; }
-[data-testid="stChatMessage"] strong { color: #c0b0e0 !important; }
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] { color: #d4ccc4 !important; }
+[data-testid="stChatMessage"] div { color: #ede8e0 !important; }
+[data-testid="stChatMessage"] strong { color: #ddd0ff !important; }
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] { color: #ede8e0 !important; }
 .stChatInputContainer textarea {
     background: #10102a !important;
     border: 1px solid #2a2a50 !important;
-    color: #e0d8cc !important;
+    color: #f0ebe3 !important;
     border-radius: 8px !important;
     font-family: "Lora", serif !important;
 }
@@ -358,7 +358,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
 [data-testid="stDownloadButton"] > button {
     background: transparent !important;
     border: 1px solid #2a2a50 !important;
-    color: #8877aa !important;
+    color: #b0a0cc !important;
     font-family: "Raleway", sans-serif;
     font-size: 0.8rem;
     letter-spacing: 0.04em;
@@ -368,7 +368,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
 [data-testid="stDownloadButton"] > button:hover {
     background: #14143a !important;
     border-color: #5533aa !important;
-    color: #c8b0f0 !important;
+    color: #ddd0ff !important;
 }
 
 /* ── Alerts ──────────────────────────────────────────────────────── */
@@ -383,7 +383,7 @@ div[data-baseweb="popover"], div[data-baseweb="popover"] * {
     font-size: 0.78rem;
     font-weight: 500;
     letter-spacing: 0.05em;
-    color: #5d5585 !important;
+    color: #9988bb !important;
     background: transparent;
     border-bottom: 2px solid transparent;
     padding: 0.55rem 1rem;
@@ -421,8 +421,8 @@ hr { border-color: #181830; }
 [data-testid="stExpander"] span,
 [data-testid="stExpander"] div,
 [data-testid="stExpander"] small,
-[data-testid="stExpander"] label { color: #a8a0a0 !important; }
-[data-testid="stExpander"] strong { color: #c0b0e0 !important; }
+[data-testid="stExpander"] label { color: #c8c0c0 !important; }
+[data-testid="stExpander"] strong { color: #ddd0ff !important; }
 
 /* ── Multiselect ─────────────────────────────────────────────────── */
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] {
@@ -431,26 +431,26 @@ hr { border-color: #181830; }
 }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] > div {
     background: #10102a !important;
-    color: #8877aa !important;
+    color: #b0a0cc !important;
 }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] input {
-    color: #8877aa !important;
+    color: #b0a0cc !important;
     background: transparent !important;
-    caret-color: #8877aa !important;
+    caret-color: #b0a0cc !important;
 }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="tag"] {
     background-color: #33228a !important;
     color: #d4bfff !important;
     border-radius: 4px !important;
 }
-[data-testid="stSidebar"] [data-testid="stMultiSelect"] svg { fill: #8877aa !important; }
+[data-testid="stSidebar"] [data-testid="stMultiSelect"] svg { fill: #b0a0cc !important; }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] > div:last-child {
     background: transparent !important;
 }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] ul { background: #10102a !important; }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] li {
     background: #10102a !important;
-    color: #8877aa !important;
+    color: #b0a0cc !important;
 }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] li:hover { background: #1a1a40 !important; }
 
@@ -471,7 +471,7 @@ hr { border-color: #181830; }
 }
 .placeholder-panel h3 {
     font-family: "Cinzel", serif;
-    color: #30305a;
+    color: #6666aa;
     font-size: 1.15rem;
     letter-spacing: 0.1em;
     margin: 0;
@@ -480,7 +480,7 @@ hr { border-color: #181830; }
     font-style: italic;
     margin: 0;
     font-size: 0.88rem;
-    color: #25254a;
+    color: #5a5a88;
     line-height: 1.7;
 }
 
@@ -492,7 +492,7 @@ hr { border-color: #181830; }
 }
 .chat-section-header p {
     font-family: "Cinzel", serif;
-    color: #6655aa;
+    color: #9988cc;
     font-size: 0.82rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -501,7 +501,7 @@ hr { border-color: #181830; }
 .chat-section-header small {
     font-family: "Raleway", sans-serif;
     font-size: 0.75rem;
-    color: #3d3d66;
+    color: #6a6a99;
     font-style: italic;
 }
 </style>
@@ -676,20 +676,20 @@ with st.sidebar:
 <div style="background:#0c0c24;border:1px solid #1e1e3a;border-radius:10px;
             padding:0.85rem 1rem;margin-bottom:0.8rem;">
   <div style="font-family:Raleway,sans-serif;font-size:0.6rem;font-weight:600;
-              letter-spacing:0.13em;text-transform:uppercase;color:#4d4475;
+              letter-spacing:0.13em;text-transform:uppercase;color:#8877aa;
               margin-bottom:0.55rem;">Chart at a Glance</div>
   <div style="display:flex;gap:0;">
     <div style="flex:1;text-align:center;border-right:1px solid #181830;padding:0 0.4rem;">
       <div style="font-size:1rem;color:#ffd580;margin-bottom:0.15rem;">☉</div>
-      <div style="font-family:Lora,serif;font-size:0.78rem;color:#c8b8e8;">{_g_sun.get('sign','—')}</div>
+      <div style="font-family:Lora,serif;font-size:0.78rem;color:#e0d4fc;">{_g_sun.get('sign','—')}</div>
     </div>
     <div style="flex:1;text-align:center;border-right:1px solid #181830;padding:0 0.4rem;">
       <div style="font-size:1rem;color:#aac8ff;margin-bottom:0.15rem;">☽</div>
-      <div style="font-family:Lora,serif;font-size:0.78rem;color:#c8b8e8;">{_g_moon.get('sign','—')}</div>
+      <div style="font-family:Lora,serif;font-size:0.78rem;color:#e0d4fc;">{_g_moon.get('sign','—')}</div>
     </div>
     <div style="flex:1;text-align:center;padding:0 0.4rem;">
       <div style="font-size:1rem;color:#a8f0d0;margin-bottom:0.15rem;">↑</div>
-      <div style="font-family:Lora,serif;font-size:0.78rem;color:#c8b8e8;">{_g_asc.get('sign','—')}</div>
+      <div style="font-family:Lora,serif;font-size:0.78rem;color:#e0d4fc;">{_g_asc.get('sign','—')}</div>
     </div>
   </div>
 </div>""", unsafe_allow_html=True)
@@ -1216,7 +1216,9 @@ with natal_tab:
             )
         with dl_col3:
             try:
-                _pdf_bytes = _natal_pdf(result)
+                # Pass _cd1 so the PDF gets SVGs whether freshly generated or
+                # regenerated after loading from the database (which strips SVGs).
+                _pdf_bytes = _natal_pdf({**result, "chart_data": _cd1})
                 st.download_button(
                     label="Download as PDF",
                     data=_pdf_bytes,
@@ -1371,7 +1373,7 @@ def _render_transit_timeline(transit_passes: list[dict]) -> None:
         margin=dict(l=0, r=20, t=20, b=40),
         paper_bgcolor="#12122a",
         plot_bgcolor="#12122a",
-        font=dict(color="#c8b8e8", family="Georgia, serif", size=12),
+        font=dict(color="#e0d4fc", family="Georgia, serif", size=12),
         xaxis=dict(
             type="date",
             range=[today.isoformat(), (today + timedelta(days=365)).isoformat()],
