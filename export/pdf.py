@@ -136,33 +136,60 @@ _KERYKEION_FALLBACKS: dict[str, str] = {
 
 
 def _resolve_css_vars(svg_str: str) -> str:
-    """Replace CSS custom properties (var(--x)) with their literal values.
+    """Replace CSS custom properties (var(--x)) with literal colors for svglib.
 
-    svglib cannot evaluate CSS variables, so we:
-    1. Extract every --variable: value definition from all <style>/:root blocks.
-    2. Merge with a built-in fallback palette for kerykeion vars absent from
-       the SVG's own style block (e.g. percentage-bar colors).
-    3. Substitute every var(--name) occurrence with the resolved literal.
+    kerykeion SVGs have two complications this function handles:
+    - Chained variables: some vars resolve to another var(), e.g.
+        --cardinal-percentage: var(\\n    --fire-percentage\\n)
+      A single substitution pass replaces the outer var but leaves the inner
+      one unresolved.  We pre-flatten the map so every value is a literal.
+    - Multi-line var() calls: attribute values like var(\\n  --name\\n) contain
+      actual newlines.  We normalise whitespace before substituting.
     """
-    css_vars: dict[str, str] = dict(_KERYKEION_FALLBACKS)  # start with fallbacks
+    # 1. Seed map with known kerykeion defaults.
+    css_vars: dict[str, str] = dict(_KERYKEION_FALLBACKS)
 
-    # Collect definitions from every <style> block and every :root rule inside it
+    # 2. Extract every --variable: value pair from every <style> block.
+    #    Use [^;]+ (not [^;\n]+) so multi-line values are captured whole.
     for style_content in re.findall(r"<style[^>]*>(.*?)</style>", svg_str, re.DOTALL | re.IGNORECASE):
-        for root_content in re.findall(r":root\s*\{([^}]+)\}", style_content, re.DOTALL):
-            for m in re.finditer(r"(--[\w-]+)\s*:\s*([^;]+);", root_content):
-                css_vars[m.group(1).strip()] = m.group(2).strip()
+        for m in re.finditer(r"(--[\w-]+)\s*:\s*([^;]+);", style_content, re.DOTALL):
+            css_vars[m.group(1).strip()] = m.group(2).strip()
 
+    # 3. Flatten chained references inside the map.
+    #    e.g. --cardinal-pct maps to "var(--fire-pct)" → replace with "#ff6600".
+    #    Two passes handle one level of indirection (kerykeion goes no deeper).
+    def _compact_var(s: str) -> str:
+        """Collapse whitespace inside a var(…) string to get var(--name)."""
+        return re.sub(r"var\(\s*(--[\w-]+)\s*\)", lambda m: f"var({m.group(1)})", s)
+
+    for _ in range(2):
+        for key, val in list(css_vars.items()):
+            val = _compact_var(val)
+            inner = re.match(r"^var\((--[\w-]+)\)$", val)
+            if inner:
+                css_vars[key] = css_vars.get(inner.group(1), "#000000")
+            else:
+                css_vars[key] = val
+
+    # 4. Normalise whitespace inside every var(…) in the SVG itself.
+    svg_str = re.sub(
+        r"var\(([^)]*)\)",
+        lambda m: "var(" + re.sub(r"\s+", "", m.group(1)) + ")",
+        svg_str,
+    )
+
+    # 5. Single-pass substitution — all map values are now literal colors.
     def _sub(match: re.Match) -> str:
-        var_name = match.group(1).strip()
+        var_name = match.group(1)
         fallback = (match.group(2) or "").strip() or "#000000"
         return css_vars.get(var_name, fallback)
 
-    # One pass is enough; kerykeion doesn't chain variables
-    return re.sub(
-        r"var\(\s*(--[\w-]+)\s*(?:,\s*([^)]+))?\s*\)",
-        _sub,
-        svg_str,
-    )
+    svg_str = re.sub(r"var\((--[\w-]+)(?:,([^)]*))?\)", _sub, svg_str)
+
+    # 6. Catch-all: any var() that survived (malformed / deeply chained) → black.
+    svg_str = re.sub(r"var\([^)]*\)", "#000000", svg_str)
+
+    return svg_str
 
 
 def _svg_flowable(svg_str: str, max_width_pts: float = _PAGE_WIDTH_PTS):
