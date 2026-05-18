@@ -870,7 +870,7 @@ with natal_tab:
         # Regenerate report button
         _regen_col, _ = st.columns([1, 3])
         with _regen_col:
-            if st.button("↺ Regenerate Reading", type="secondary", help="Regenerate with current focus & context settings"):
+            if st.button("↺ Regenerate Reading", key="regen_natal", use_container_width=True):
                 from cache.report_cache import make_report_key, delete_report as _del_report
                 _new_focus = ", ".join(st.session_state.get("f_report_focus") or []) or None
                 _rk = make_report_key(
