@@ -269,6 +269,8 @@ hr { border-color: #2e2e4e; }
 """, unsafe_allow_html=True)
 
 # --- Session state initialisation ---
+if "f_birth_time_timezone" not in st.session_state:
+    st.session_state["f_birth_time_timezone"] = "UTC"
 if "report_result" not in st.session_state:
     st.session_state.report_result = None
 if "chat_history" not in st.session_state:
@@ -404,7 +406,6 @@ with st.sidebar:
         birth_time_timezone = st.selectbox(
             "Birth Timezone *",
             options=ALL_TIMEZONES,
-            index=DEFAULT_TZ_INDEX,
             key="f_birth_time_timezone",
         )
         house_system = st.selectbox(
