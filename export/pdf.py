@@ -116,29 +116,48 @@ def _md_to_flowables(text: str, styles) -> list:
     return flowables
 
 
+# Fallback palette for kerykeion CSS variables that may not appear in the SVG's
+# own :root block (e.g. dynamically injected percentage-bar colors).
+_KERYKEION_FALLBACKS: dict[str, str] = {
+    "--kerykeion-chart-color-paper-0":             "#ffffff",
+    "--kerykeion-chart-color-paper-1":             "#f0f0f0",
+    "--kerykeion-chart-color-fire-percentage":     "#ff6600",
+    "--kerykeion-chart-color-earth-percentage":    "#669900",
+    "--kerykeion-chart-color-air-percentage":      "#ccaa00",
+    "--kerykeion-chart-color-water-percentage":    "#3388cc",
+    "--kerykeion-chart-color-trine":               "#36d100",
+    "--kerykeion-chart-color-conjunction":         "#5765fb",
+    "--kerykeion-chart-color-opposition":          "#ff0000",
+    "--kerykeion-chart-color-square":              "#ff0000",
+    "--kerykeion-chart-color-sextile":             "#9090fb",
+    "--kerykeion-chart-color-quincunx":            "#aaaa00",
+    "--kerykeion-chart-color-semi-sextile":        "#aaaa00",
+}
+
+
 def _resolve_css_vars(svg_str: str) -> str:
     """Replace CSS custom properties (var(--x)) with their literal values.
 
-    svglib cannot evaluate CSS variables, so we extract the definitions from
-    the SVG's own <style>/:root block and inline them before rendering.
+    svglib cannot evaluate CSS variables, so we:
+    1. Extract every --variable: value definition from all <style>/:root blocks.
+    2. Merge with a built-in fallback palette for kerykeion vars absent from
+       the SVG's own style block (e.g. percentage-bar colors).
+    3. Substitute every var(--name) occurrence with the resolved literal.
     """
-    # Collect variable definitions from the <style> block's :root { } section
-    css_vars: dict[str, str] = {}
-    style_match = re.search(r"<style[^>]*>(.*?)</style>", svg_str, re.DOTALL | re.IGNORECASE)
-    if style_match:
-        root_match = re.search(r":root\s*\{([^}]+)\}", style_match.group(1), re.DOTALL)
-        if root_match:
-            for m in re.finditer(r"(--[\w-]+)\s*:\s*([^;]+);", root_match.group(1)):
-                css_vars[m.group(1).strip()] = m.group(2).strip()
+    css_vars: dict[str, str] = dict(_KERYKEION_FALLBACKS)  # start with fallbacks
 
-    if not css_vars:
-        return svg_str
+    # Collect definitions from every <style> block and every :root rule inside it
+    for style_content in re.findall(r"<style[^>]*>(.*?)</style>", svg_str, re.DOTALL | re.IGNORECASE):
+        for root_content in re.findall(r":root\s*\{([^}]+)\}", style_content, re.DOTALL):
+            for m in re.finditer(r"(--[\w-]+)\s*:\s*([^;]+);", root_content):
+                css_vars[m.group(1).strip()] = m.group(2).strip()
 
     def _sub(match: re.Match) -> str:
         var_name = match.group(1).strip()
         fallback = (match.group(2) or "").strip() or "#000000"
         return css_vars.get(var_name, fallback)
 
+    # One pass is enough; kerykeion doesn't chain variables
     return re.sub(
         r"var\(\s*(--[\w-]+)\s*(?:,\s*([^)]+))?\s*\)",
         _sub,
