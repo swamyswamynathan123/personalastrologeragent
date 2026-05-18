@@ -716,20 +716,42 @@ with natal_tab:
 
         # Chart wheels — regenerate SVGs if missing (e.g. loaded from saved charts where SVGs are stripped)
         _cd1 = result.get("chart_data") or {}
-        if not _cd1.get("chart_svg") and _cd1.get("_natal_lat") and result.get("parsed_birth_datetime"):
+        _needs_regen = (
+            (not _cd1.get("chart_svg") or not _cd1.get("vedic_svg"))
+            and _cd1.get("_natal_lat") is not None
+            and result.get("parsed_birth_datetime")
+        )
+        if _needs_regen:
             try:
-                from astro.compute import generate_chart_svg as _gen_svg
+                from astro.compute import generate_chart_svg as _gen_svg, generate_vedic_chart_svg as _gen_vedic_svg
                 _bdt = datetime.fromisoformat(result["parsed_birth_datetime"])
-                _regen_svg = _gen_svg(
-                    full_name=result.get("full_name", ""),
-                    birth_year=_bdt.year, birth_month=_bdt.month, birth_day=_bdt.day,
-                    birth_hour=_bdt.hour, birth_minute=_bdt.minute,
-                    city="", nation="", tz_str=result.get("birth_time_timezone") or "UTC",
-                    house_system=result.get("house_system") or "Placidus",
-                    lat=_cd1["_natal_lat"], lng=_cd1["_natal_lng"],
-                )
-                if _regen_svg:
-                    _cd1 = {**_cd1, "chart_svg": _regen_svg}
+                _lat = _cd1["_natal_lat"]
+                _lng = _cd1["_natal_lng"]
+                _tz = result.get("birth_time_timezone") or "UTC"
+                _hs = result.get("house_system") or "Placidus"
+                _name = result.get("full_name", "")
+                _updates = {}
+                if not _cd1.get("chart_svg"):
+                    _svg = _gen_svg(
+                        full_name=_name,
+                        birth_year=_bdt.year, birth_month=_bdt.month, birth_day=_bdt.day,
+                        birth_hour=_bdt.hour, birth_minute=_bdt.minute,
+                        city="", nation="", tz_str=_tz, house_system=_hs,
+                        lat=_lat, lng=_lng,
+                    )
+                    if _svg:
+                        _updates["chart_svg"] = _svg
+                if not _cd1.get("vedic_svg"):
+                    _vsvg = _gen_vedic_svg(
+                        full_name=_name,
+                        birth_year=_bdt.year, birth_month=_bdt.month, birth_day=_bdt.day,
+                        birth_hour=_bdt.hour, birth_minute=_bdt.minute,
+                        tz_str=_tz, lat=_lat, lng=_lng,
+                    )
+                    if _vsvg:
+                        _updates["vedic_svg"] = _vsvg
+                if _updates:
+                    _cd1 = {**_cd1, **_updates}
                     st.session_state.report_result = {**result, "chart_data": _cd1}
             except Exception:
                 pass
