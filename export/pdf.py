@@ -3,6 +3,9 @@ PDF export for natal and synastry reports using reportlab.
 
 reportlab handles the full Unicode range natively (astrological symbols,
 degree signs, em-dashes, curly quotes) without needing external font files.
+
+Chart wheels (SVGs) are embedded via svglib: each SVG is scaled to fit the
+page width and inserted as a reportlab Drawing before the report text.
 """
 from __future__ import annotations
 
@@ -14,6 +17,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
+
+# Page usable width: A4 210mm − 2×20mm margins = 170mm
+_PAGE_WIDTH_PTS = 170 * mm
 
 _PURPLE = colors.HexColor("#4a2d7a")
 _LIGHT_PURPLE = colors.HexColor("#6644aa")
@@ -110,6 +116,35 @@ def _md_to_flowables(text: str, styles) -> list:
     return flowables
 
 
+def _svg_flowable(svg_str: str, max_width_pts: float = _PAGE_WIDTH_PTS):
+    """Convert an SVG string to a scaled reportlab Drawing, or return None on failure."""
+    try:
+        import tempfile
+        import os
+        from svglib.svglib import svg2rlg
+
+        with tempfile.NamedTemporaryFile(
+            suffix=".svg", delete=False, mode="w", encoding="utf-8"
+        ) as f:
+            f.write(svg_str)
+            tmp_path = f.name
+        try:
+            drawing = svg2rlg(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+
+        if drawing is None or drawing.width == 0:
+            return None
+
+        scale = max_width_pts / drawing.width
+        drawing.width = max_width_pts
+        drawing.height = drawing.height * scale
+        drawing.transform = (scale, 0, 0, scale, 0, 0)
+        return drawing
+    except Exception:
+        return None
+
+
 def _footer(styles) -> list:
     return [
         Spacer(1, 16),
@@ -147,6 +182,29 @@ def natal_pdf(result: dict) -> bytes:
     story.append(Spacer(1, 6))
     story.append(HRFlowable(width="100%", thickness=1.5, color=_ACCENT))
     story.append(Spacer(1, 12))
+
+    # Embed chart wheels if available
+    chart_data = result.get("chart_data") or {}
+    _charts = [
+        ("Natal Chart Wheel", chart_data.get("chart_svg") or ""),
+        ("Transit Overlay", chart_data.get("transit_svg") or ""),
+        ("Vedic Chart Wheel", chart_data.get("vedic_svg") or ""),
+    ]
+    _any_chart = False
+    for chart_title, svg_str in _charts:
+        if not svg_str:
+            continue
+        drawing = _svg_flowable(svg_str)
+        if drawing is None:
+            continue
+        story.append(Paragraph(chart_title, styles["AstroH2"]))
+        story.append(Spacer(1, 4))
+        story.append(drawing)
+        story.append(Spacer(1, 14))
+        _any_chart = True
+    if _any_chart:
+        story.append(HRFlowable(width="100%", thickness=0.5, color=_RULE_GREY))
+        story.append(Spacer(1, 12))
 
     report_text = result.get("final_report") or ""
     story.extend(_md_to_flowables(report_text, styles))

@@ -25,76 +25,93 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=Raleway:wght@300;400;500;600&display=swap');
+
 /* ── Global typography ───────────────────────────────────────────── */
 html, body, [class*="css"] {
-    font-family: "Georgia", "Times New Roman", serif;
+    font-family: "Lora", "Georgia", serif;
 }
 
-/* Page background */
+/* ── Page background ─────────────────────────────────────────────── */
 .stApp {
-    background-color: #0f0f1a;
-    color: #e8e0d0;
+    background-color: #08081a;
+    background-image:
+        radial-gradient(ellipse at 15% 15%, rgba(80,50,140,0.18) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 85%, rgba(40,25,90,0.22) 0%, transparent 55%);
+    color: #e0d8cc;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
-    background-color: #16162a;
-    border-right: 1px solid #2e2e4e;
+    background-color: #0b0b1c;
+    border-right: 1px solid #202040;
 }
-[data-testid="stSidebar"] .stForm {
-    background: transparent;
-}
+[data-testid="stSidebar"] .stForm { background: transparent; }
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] .stTextInput label,
 [data-testid="stSidebar"] .stSelectbox label,
 [data-testid="stSidebar"] .stDateInput label,
 [data-testid="stSidebar"] .stTimeInput label,
 [data-testid="stSidebar"] .stTextArea label {
-    color: #c8b8e8 !important;
-    font-size: 0.82rem;
-    letter-spacing: 0.04em;
+    color: #8877aa !important;
+    font-family: "Raleway", sans-serif !important;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
 }
 [data-testid="stSidebar"] input,
 [data-testid="stSidebar"] select,
 [data-testid="stSidebar"] textarea {
-    background-color: #1e1e38 !important;
-    border: 1px solid #3a3a60 !important;
-    color: #e8e0d0 !important;
+    background-color: #10102a !important;
+    border: 1px solid #2a2a50 !important;
+    color: #e0d8cc !important;
     border-radius: 6px !important;
+    font-family: "Lora", serif !important;
+    font-size: 0.88rem !important;
 }
 [data-testid="stSidebar"] input:focus,
 [data-testid="stSidebar"] textarea:focus {
-    border-color: #8866cc !important;
-    box-shadow: 0 0 0 2px rgba(136,102,204,0.25) !important;
+    border-color: #6644aa !important;
+    box-shadow: 0 0 0 2px rgba(102,68,170,0.2) !important;
 }
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3,
-[data-testid="stSidebar"] h4,
-[data-testid="stSidebar"] h5,
-[data-testid="stSidebar"] h6 {
-    color: #d4bfff !important;
+[data-testid="stSidebar"] h3 {
+    font-family: "Cinzel", serif !important;
+    color: #b898e8 !important;
+    letter-spacing: 0.06em;
+}
+[data-testid="stSidebar"] h4 {
+    font-family: "Raleway", sans-serif !important;
+    font-size: 0.68rem !important;
+    font-weight: 600 !important;
+    color: #5d5585 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin: 1.3rem 0 0.35rem !important;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid #181830;
 }
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] li,
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span {
-    color: #e8e0d0 !important;
+    color: #b8b0a4 !important;
+    font-size: 0.86rem;
 }
 [data-testid="stSidebar"] small,
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
-    color: #b8aed0 !important;
+    color: #5d5585 !important;
+    font-family: "Raleway", sans-serif !important;
 }
 
 /* ── Help / tooltip icons ────────────────────────────────────────── */
-[data-testid="stTooltipIcon"] {
-    opacity: 1 !important;
-}
+[data-testid="stTooltipIcon"] { opacity: 1 !important; }
 [data-testid="stTooltipIcon"] svg circle {
-    fill: #9977cc !important;
-    stroke: #9977cc !important;
+    fill: #5533aa !important;
+    stroke: #5533aa !important;
 }
 [data-testid="stTooltipIcon"] svg path,
 [data-testid="stTooltipIcon"] svg line,
@@ -103,8 +120,8 @@ html, body, [class*="css"] {
     stroke: #ffffff !important;
 }
 [data-testid="stTooltipIcon"]:hover svg circle {
-    fill: #c8a8f8 !important;
-    stroke: #c8a8f8 !important;
+    fill: #8855cc !important;
+    stroke: #8855cc !important;
 }
 [data-testid="stTooltipIcon"]:hover svg path,
 [data-testid="stTooltipIcon"]:hover svg line,
@@ -113,243 +130,329 @@ html, body, [class*="css"] {
     stroke: #ffffff !important;
 }
 
-/* ── Tooltip popup content ───────────────────────────────────────── */
-[data-testid="stTooltipContent"],
-[data-testid="stTooltipContent"] *,
-div[role="tooltip"],
-div[role="tooltip"] *,
-div[data-baseweb="tooltip"],
-div[data-baseweb="tooltip"] *,
-div[data-baseweb="popover"],
-div[data-baseweb="popover"] * {
-    background-color: #2a2a4a !important;
-    color: #e8e0d0 !important;
-    border-color: #4a4a70 !important;
-    font-size: 0.85rem !important;
-    line-height: 1.6 !important;
+/* ── Tooltip popup ───────────────────────────────────────────────── */
+[data-testid="stTooltipContent"], [data-testid="stTooltipContent"] *,
+div[role="tooltip"], div[role="tooltip"] *,
+div[data-baseweb="tooltip"], div[data-baseweb="tooltip"] *,
+div[data-baseweb="popover"], div[data-baseweb="popover"] * {
+    background-color: #14142e !important;
+    color: #d0c8c0 !important;
+    border-color: #30305a !important;
+    font-family: "Lora", serif !important;
+    font-size: 0.84rem !important;
+    line-height: 1.7 !important;
 }
 
-/* ── Primary button ──────────────────────────────────────────────── */
+/* ── Generate button ─────────────────────────────────────────────── */
 .stButton > button[kind="primary"],
 .stFormSubmitButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #6644aa 0%, #9966cc 100%);
+    background: linear-gradient(135deg, #3d2080 0%, #6633bb 50%, #8855dd 100%);
+    background-size: 200% 200%;
     border: none;
     color: #fff;
-    font-family: "Georgia", serif;
-    letter-spacing: 0.06em;
+    font-family: "Cinzel", serif;
+    font-size: 0.88rem;
+    letter-spacing: 0.1em;
     border-radius: 8px;
-    padding: 0.55rem 1.2rem;
-    transition: opacity 0.2s ease;
+    padding: 0.68rem 1.4rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 22px rgba(100,60,200,0.35);
 }
 .stButton > button[kind="primary"]:hover,
 .stFormSubmitButton > button[kind="primary"]:hover {
-    opacity: 0.88;
+    background-position: right center;
+    box-shadow: 0 6px 30px rgba(130,80,220,0.5);
+    transform: translateY(-1px);
+}
+.stButton > button[kind="primary"]:active,
+.stFormSubmitButton > button[kind="primary"]:active {
+    transform: translateY(0);
 }
 
-/* ── Secondary / default buttons ─────────────────────────────────── */
+/* ── Secondary buttons ───────────────────────────────────────────── */
 .stButton > button[kind="secondary"],
 [data-testid="baseButton-secondary"] {
-    background: #1e1e38 !important;
-    border: 1px solid #3a3a60 !important;
-    color: #d4bfff !important;
-    font-family: "Georgia", serif;
-    border-radius: 8px;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    background: transparent !important;
+    border: 1px solid #2a2a50 !important;
+    color: #8877aa !important;
+    font-family: "Raleway", sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    border-radius: 6px;
+    transition: all 0.2s ease;
 }
 .stButton > button[kind="secondary"]:hover,
 [data-testid="baseButton-secondary"]:hover {
-    background: #2a2a50 !important;
-    border-color: #8866cc !important;
-    color: #e8d8ff !important;
+    background: #14143a !important;
+    border-color: #5533aa !important;
+    color: #c8b0f0 !important;
 }
 
 /* ── Page header ─────────────────────────────────────────────────── */
 .page-header {
-    padding: 2rem 0 1.2rem;
-    border-bottom: 1px solid #2e2e4e;
-    margin-bottom: 1.6rem;
+    padding: 2rem 0 1.4rem;
+    border-bottom: 1px solid #1e1e3a;
+    margin-bottom: 1.8rem;
+    text-align: center;
 }
 .page-header h1 {
     margin: 0;
+    font-family: "Cinzel", serif;
     font-size: 2.2rem;
-    color: #d4bfff;
-    letter-spacing: 0.02em;
+    font-weight: 500;
+    background: linear-gradient(135deg, #c8a8f8 0%, #a0c4ff 45%, #c8a8f8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 0.08em;
 }
 .page-header p {
-    margin: 0.4rem 0 0;
-    color: #9988bb;
+    margin: 0.5rem 0 0;
+    color: #6655aa;
     font-style: italic;
-    font-size: 1rem;
+    font-size: 0.92rem;
+    letter-spacing: 0.02em;
+}
+
+/* ── Birth data card ─────────────────────────────────────────────── */
+.birth-data-card {
+    display: flex;
+    flex-wrap: wrap;
+    background: linear-gradient(135deg, #0c0c24 0%, #101028 100%);
+    border: 1px solid #222244;
+    border-radius: 12px;
+    padding: 1.2rem 1.6rem;
+    margin-bottom: 1.4rem;
+    box-shadow: 0 4px 28px rgba(60,40,120,0.18);
+    gap: 0;
+}
+.bdc-item {
+    flex: 1;
+    min-width: 130px;
+    padding: 0.3rem 1.2rem 0.3rem 0;
+    border-right: 1px solid #1e1e3a;
+}
+.bdc-item:last-child { border-right: none; }
+.bdc-label {
+    display: block;
+    font-family: "Raleway", sans-serif;
+    font-size: 0.63rem;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: #4d4475;
+    margin-bottom: 0.22rem;
+}
+.bdc-value {
+    display: block;
+    font-family: "Lora", serif;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #c8b8e8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.bdc-sub {
+    display: block;
+    font-family: "Raleway", sans-serif;
+    font-size: 0.68rem;
+    color: #4d4475;
+    margin-top: 0.12rem;
+    font-style: italic;
 }
 
 /* ── Report card ─────────────────────────────────────────────────── */
 .report-card {
-    background: #16162a;
-    border: 1px solid #2e2e4e;
-    border-radius: 12px;
-    padding: 2rem 2.4rem;
-    margin-bottom: 1.5rem;
-    line-height: 1.85;
-    color: #e8e0d0;
+    background: linear-gradient(180deg, #0c0c22 0%, #0a0a1e 100%);
+    border: 1px solid #1e1e3a;
+    border-radius: 14px;
+    padding: 2.4rem 2.8rem;
+    margin-bottom: 1.6rem;
+    line-height: 1.95;
+    color: #d4ccc4;
+    box-shadow: 0 8px 48px rgba(50,30,110,0.2);
 }
 .report-card h1,
 .report-card h2,
 .report-card h3,
 .report-card h4 {
-    color: #c8a8f8;
-    font-size: 1.15rem;
-    letter-spacing: 0.05em;
+    font-family: "Cinzel", serif;
+    color: #a888d8;
+    font-size: 0.84rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    border-bottom: 1px solid #2e2e4e;
-    padding-bottom: 0.5rem;
-    margin-top: 1.6rem;
+    border: none;
+    border-left: 3px solid #5533aa;
+    padding: 0.25rem 0 0.25rem 0.85rem;
+    margin-top: 2.2rem;
+    margin-bottom: 0.9rem;
+    background: linear-gradient(90deg, rgba(85,51,170,0.08) 0%, transparent 100%);
+    border-radius: 0 4px 4px 0;
 }
 .report-card h1:first-child,
 .report-card h2:first-child,
 .report-card h3:first-child,
 .report-card h4:first-child { margin-top: 0; }
 .report-card hr { display: none; }
-.report-card strong { color: #d4bfff; }
-.report-card li { margin-bottom: 0.3rem; }
+.report-card strong { color: #b8a8d8; }
+.report-card em { color: #a898c8; }
+.report-card li { margin-bottom: 0.45rem; padding-left: 0.2rem; }
+.report-card li::marker { color: #5533aa; }
+.report-card p { margin-bottom: 0.95rem; }
 
-/* ── Metric cards ────────────────────────────────────────────────── */
-[data-testid="stMetric"] {
-    background: #1e1e38;
-    border: 1px solid #2e2e4e;
-    border-radius: 10px;
-    padding: 0.9rem 1rem;
+/* ── Chart SVG wrapper ───────────────────────────────────────────── */
+.chart-svg-wrapper {
+    background: #0c0c22;
+    border: 1px solid #1e1e3a;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 0.6rem;
 }
-[data-testid="stMetricLabel"] { color: #9988bb !important; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
-[data-testid="stMetricValue"] { color: #d4bfff !important; font-size: 1.1rem; }
+.chart-svg-wrapper img { width: 100%; height: auto; display: block; }
+
+/* ── Metric cards (fallback) ─────────────────────────────────────── */
+[data-testid="stMetric"] {
+    background: #0e0e26;
+    border: 1px solid #1e1e3a;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+}
+[data-testid="stMetricLabel"] {
+    color: #4d4475 !important;
+    font-family: "Raleway", sans-serif !important;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+[data-testid="stMetricValue"] {
+    color: #c0b0e0 !important;
+    font-family: "Lora", serif !important;
+    font-size: 0.95rem;
+}
 
 /* ── Chat ────────────────────────────────────────────────────────── */
 [data-testid="stChatMessage"] {
-    background: #1e1e38;
-    border: 1px solid #2e2e4e;
+    background: #0e0e26;
+    border: 1px solid #1e1e3a;
     border-radius: 10px;
-    margin-bottom: 0.5rem;
-    color: #e8e0d0 !important;
+    margin-bottom: 0.6rem;
+    color: #d4ccc4 !important;
 }
 [data-testid="stChatMessage"] p,
 [data-testid="stChatMessage"] li,
 [data-testid="stChatMessage"] span,
-[data-testid="stChatMessage"] div {
-    color: #e8e0d0 !important;
-}
-[data-testid="stChatMessage"] strong {
-    color: #d4bfff !important;
-}
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
-    color: #e8e0d0 !important;
-}
+[data-testid="stChatMessage"] div { color: #d4ccc4 !important; }
+[data-testid="stChatMessage"] strong { color: #c0b0e0 !important; }
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] { color: #d4ccc4 !important; }
 .stChatInputContainer textarea {
-    background: #1e1e38 !important;
-    border: 1px solid #3a3a60 !important;
-    color: #e8e0d0 !important;
+    background: #10102a !important;
+    border: 1px solid #2a2a50 !important;
+    color: #e0d8cc !important;
     border-radius: 8px !important;
+    font-family: "Lora", serif !important;
 }
 
 /* ── Download buttons ────────────────────────────────────────────── */
 [data-testid="stDownloadButton"] > button {
-    background: #1e1e38 !important;
-    border: 1px solid #3a3a60 !important;
-    color: #d4bfff !important;
-    border-radius: 8px;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    background: transparent !important;
+    border: 1px solid #2a2a50 !important;
+    color: #8877aa !important;
+    font-family: "Raleway", sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    border-radius: 6px;
+    transition: all 0.2s ease;
 }
 [data-testid="stDownloadButton"] > button:hover {
-    background: #2a2a50 !important;
-    border-color: #8866cc !important;
-    color: #e8d8ff !important;
+    background: #14143a !important;
+    border-color: #5533aa !important;
+    color: #c8b0f0 !important;
 }
 
-/* ── Alert / info boxes ──────────────────────────────────────────── */
+/* ── Alerts ──────────────────────────────────────────────────────── */
 [data-testid="stAlert"] {
-    border-radius: 8px;
+    border-radius: 10px;
+    font-family: "Lora", serif;
 }
 
 /* ── Tabs ────────────────────────────────────────────────────────── */
 [data-testid="stTabs"] [data-baseweb="tab"] {
-    color: #9988bb !important;
+    font-family: "Raleway", sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    color: #5d5585 !important;
     background: transparent;
     border-bottom: 2px solid transparent;
+    padding: 0.55rem 1rem;
+    transition: color 0.2s ease;
 }
-[data-testid="stTabs"] [data-baseweb="tab"]:hover {
-    color: #d4bfff !important;
-}
+[data-testid="stTabs"] [data-baseweb="tab"]:hover { color: #b0a0d0 !important; }
 [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
-    color: #d4bfff !important;
-    border-bottom: 2px solid #8866cc !important;
+    font-weight: 600;
+    color: #c8a8f8 !important;
+    border-bottom: 2px solid #6633bb !important;
 }
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    border-bottom: 1px solid #2e2e4e;
-    gap: 0.5rem;
+    border-bottom: 1px solid #1e1e3a;
+    gap: 0.1rem;
+    background: transparent;
 }
 
-/* ── Divider ─────────────────────────────────────────────────────── */
-hr { border-color: #2e2e4e; }
+/* ── Dividers ────────────────────────────────────────────────────── */
+hr { border-color: #181830; }
 
 /* ── Expanders ───────────────────────────────────────────────────── */
 [data-testid="stExpander"] summary {
-    color: #c8b8e8 !important;
-    font-family: "Georgia", serif;
+    font-family: "Raleway", sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    color: #8877aa !important;
 }
-[data-testid="stExpander"] summary:hover {
-    color: #d4bfff !important;
-}
+[data-testid="stExpander"] summary:hover { color: #b0a0d0 !important; }
 [data-testid="stExpander"] {
-    border: 1px solid #2e2e4e !important;
+    border: 1px solid #1e1e3a !important;
     border-radius: 8px !important;
-    background: #1e1e38 !important;
+    background: #0e0e26 !important;
 }
 [data-testid="stExpander"] p,
 [data-testid="stExpander"] span,
 [data-testid="stExpander"] div,
 [data-testid="stExpander"] small,
-[data-testid="stExpander"] label {
-    color: #c8c0b0 !important;
-}
-[data-testid="stExpander"] strong {
-    color: #d4bfff !important;
-}
+[data-testid="stExpander"] label { color: #a8a0a0 !important; }
+[data-testid="stExpander"] strong { color: #c0b0e0 !important; }
 
-/* ── Multiselect (report focus) ─────────────────────────────────── */
+/* ── Multiselect ─────────────────────────────────────────────────── */
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] {
-    background: #1e1e38 !important;
-    border-color: #3a3a60 !important;
+    background: #10102a !important;
+    border-color: #2a2a50 !important;
 }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] > div {
-    background: #1e1e38 !important;
-    color: #c8b8e8 !important;
+    background: #10102a !important;
+    color: #8877aa !important;
 }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] input {
-    color: #c8b8e8 !important;
+    color: #8877aa !important;
     background: transparent !important;
-    caret-color: #c8b8e8 !important;
+    caret-color: #8877aa !important;
 }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="tag"] {
-    background-color: #4433aa !important;
-    color: #fff !important;
+    background-color: #33228a !important;
+    color: #d4bfff !important;
     border-radius: 4px !important;
 }
-/* Fix the black box on the dropdown indicator */
-[data-testid="stSidebar"] [data-testid="stMultiSelect"] svg {
-    fill: #c8b8e8 !important;
-}
+[data-testid="stSidebar"] [data-testid="stMultiSelect"] svg { fill: #8877aa !important; }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] > div:last-child {
     background: transparent !important;
 }
-/* Dropdown list */
-[data-testid="stSidebar"] [data-testid="stMultiSelect"] ul {
-    background: #1e1e38 !important;
-}
+[data-testid="stSidebar"] [data-testid="stMultiSelect"] ul { background: #10102a !important; }
 [data-testid="stSidebar"] [data-testid="stMultiSelect"] li {
-    background: #1e1e38 !important;
-    color: #c8b8e8 !important;
+    background: #10102a !important;
+    color: #8877aa !important;
 }
-[data-testid="stSidebar"] [data-testid="stMultiSelect"] li:hover {
-    background: #2a2a50 !important;
-}
+[data-testid="stSidebar"] [data-testid="stMultiSelect"] li:hover { background: #1a1a40 !important; }
 
 /* ── Placeholder panel ───────────────────────────────────────────── */
 .placeholder-panel {
@@ -357,13 +460,50 @@ hr { border-color: #2e2e4e; }
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 60vh;
-    color: #555577;
+    min-height: 65vh;
     text-align: center;
-    gap: 0.6rem;
+    gap: 0.9rem;
 }
-.placeholder-panel .icon { font-size: 3.5rem; }
-.placeholder-panel p { font-style: italic; margin: 0; }
+.placeholder-panel .astro-glyph {
+    font-size: 3.8rem;
+    opacity: 0.15;
+    line-height: 1;
+}
+.placeholder-panel h3 {
+    font-family: "Cinzel", serif;
+    color: #30305a;
+    font-size: 1.15rem;
+    letter-spacing: 0.1em;
+    margin: 0;
+}
+.placeholder-panel p {
+    font-style: italic;
+    margin: 0;
+    font-size: 0.88rem;
+    color: #25254a;
+    line-height: 1.7;
+}
+
+/* ── Chat section header ─────────────────────────────────────────── */
+.chat-section-header {
+    padding: 1.2rem 0 0.4rem;
+    border-top: 1px solid #181830;
+    margin-top: 0.5rem;
+}
+.chat-section-header p {
+    font-family: "Cinzel", serif;
+    color: #6655aa;
+    font-size: 0.82rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin: 0 0 0.3rem;
+}
+.chat-section-header small {
+    font-family: "Raleway", sans-serif;
+    font-size: 0.75rem;
+    color: #3d3d66;
+    font-style: italic;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -464,15 +604,46 @@ DEFAULT_TZ_INDEX = ALL_TIMEZONES.index("UTC")
 
 
 def _render_svg(svg: str) -> None:
-    """Render an SVG string as a responsive image via base64 data URL."""
+    """Render an SVG string as a responsive image in a dark-themed wrapper."""
     import base64
     b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
     st.markdown(
-        f'<div style="background:#fff;border-radius:12px;padding:1rem;">'
+        f'<div class="chart-svg-wrapper">'
         f'<img src="data:image/svg+xml;base64,{b64}" '
         f'style="width:100%;height:auto;display:block;" /></div>',
         unsafe_allow_html=True,
     )
+
+
+def _birth_data_card(state: dict) -> None:
+    """Render an elegant birth data summary card."""
+    dob = state.get("parsed_dob") or ""
+    birth_loc = state.get("birth_location") or ""
+    birth_time_val = state.get("birth_time") or ""
+    tz_val = state.get("birth_time_timezone") or ""
+    current_loc = state.get("current_location") or ""
+    reading_date = (state.get("parsed_current_datetime") or "")[:10]
+    house_sys = state.get("house_system") or ""
+    focus = state.get("report_focus") or ""
+
+    items = [
+        ("Name", state.get("full_name") or "—", ""),
+        ("Date of Birth", dob, birth_loc),
+        ("Birth Time", birth_time_val, tz_val),
+        ("Current Location", current_loc, f"Reading: {reading_date}"),
+    ]
+    if house_sys:
+        items.append(("House System", house_sys, f"Focus: {focus}" if focus else ""))
+
+    items_html = "".join(
+        f'<div class="bdc-item">'
+        f'<span class="bdc-label">{label}</span>'
+        f'<span class="bdc-value">{value}</span>'
+        + (f'<span class="bdc-sub">{sub}</span>' if sub else "")
+        + "</div>"
+        for label, value, sub in items
+    )
+    st.markdown(f'<div class="birth-data-card">{items_html}</div>', unsafe_allow_html=True)
 
 # ── Sidebar: input form ───────────────────────────────────────────────────────
 _FOCUS_OPTIONS = [
@@ -487,7 +658,11 @@ _FOCUS_OPTIONS = [
 ]
 
 with st.sidebar:
-    st.markdown("## ⭐ Your Details")
+    st.markdown(
+        '<h2 style="font-family:Cinzel,serif;font-size:1.05rem;font-weight:500;'
+        'letter-spacing:0.1em;color:#b898e8;margin:0.5rem 0 1rem;">✦ Your Chart Details</h2>',
+        unsafe_allow_html=True,
+    )
 
     # ── Chart at a Glance + Today's Sky (shown above form once a reading exists) ──
     _glance_result = st.session_state.report_result
@@ -497,14 +672,27 @@ with st.sidebar:
         _g_moon = (_gcd.get("moon") or {})
         _g_asc = (_gcd.get("ascendant") or {})
         if _g_sun.get("sign") or _g_moon.get("sign") or _g_asc.get("sign"):
-            st.markdown("**🌟 Chart at a Glance**")
-            _glance_cols = st.columns(3)
-            with _glance_cols[0]:
-                st.caption(f"☉ {_g_sun.get('sign', '—')}")
-            with _glance_cols[1]:
-                st.caption(f"☽ {_g_moon.get('sign', '—')}")
-            with _glance_cols[2]:
-                st.caption(f"↑ {_g_asc.get('sign', '—')}")
+            st.markdown(f"""
+<div style="background:#0c0c24;border:1px solid #1e1e3a;border-radius:10px;
+            padding:0.85rem 1rem;margin-bottom:0.8rem;">
+  <div style="font-family:Raleway,sans-serif;font-size:0.6rem;font-weight:600;
+              letter-spacing:0.13em;text-transform:uppercase;color:#4d4475;
+              margin-bottom:0.55rem;">Chart at a Glance</div>
+  <div style="display:flex;gap:0;">
+    <div style="flex:1;text-align:center;border-right:1px solid #181830;padding:0 0.4rem;">
+      <div style="font-size:1rem;color:#ffd580;margin-bottom:0.15rem;">☉</div>
+      <div style="font-family:Lora,serif;font-size:0.78rem;color:#c8b8e8;">{_g_sun.get('sign','—')}</div>
+    </div>
+    <div style="flex:1;text-align:center;border-right:1px solid #181830;padding:0 0.4rem;">
+      <div style="font-size:1rem;color:#aac8ff;margin-bottom:0.15rem;">☽</div>
+      <div style="font-family:Lora,serif;font-size:0.78rem;color:#c8b8e8;">{_g_moon.get('sign','—')}</div>
+    </div>
+    <div style="flex:1;text-align:center;padding:0 0.4rem;">
+      <div style="font-size:1rem;color:#a8f0d0;margin-bottom:0.15rem;">↑</div>
+      <div style="font-family:Lora,serif;font-size:0.78rem;color:#c8b8e8;">{_g_asc.get('sign','—')}</div>
+    </div>
+  </div>
+</div>""", unsafe_allow_html=True)
 
         # Today's Sky
         _today_date = date.today().isoformat()
@@ -786,8 +974,8 @@ if submitted:
 # ── Main area: output ─────────────────────────────────────────────────────────
 st.markdown("""
 <div class="page-header">
-  <h1>⭐ Personal Astrologer</h1>
-  <p>A personalized natal chart reading powered by AI</p>
+  <h1>✦ Personal Astrologer</h1>
+  <p>Your natal chart, decoded by artificial intelligence</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -808,20 +996,7 @@ with natal_tab:
     elif st.session_state._prepared_state:
         prepared = st.session_state._prepared_state
 
-        # Metadata strip
-        col_a, col_b, col_c, col_d = st.columns(4)
-        with col_a:
-            st.metric("Name", prepared["full_name"])
-        with col_b:
-            st.metric("Date of Birth", prepared["parsed_dob"])
-        with col_c:
-            st.metric("Birth Location", prepared["birth_location"])
-        with col_d:
-            st.metric("Current Location", prepared["current_location"])
-
-        st.caption(f"Reading generated as of {prepared['parsed_current_datetime']}")
-        if prepared.get("report_focus"):
-            st.caption(f"Focus: {prepared['report_focus']}")
+        _birth_data_card(prepared)
         st.divider()
 
         # Chart SVGs
@@ -871,20 +1046,7 @@ with natal_tab:
     elif st.session_state.report_result:
         result = st.session_state.report_result
 
-        # Metadata strip
-        col_a, col_b, col_c, col_d = st.columns(4)
-        with col_a:
-            st.metric("Name", result["full_name"])
-        with col_b:
-            st.metric("Date of Birth", result["parsed_dob"])
-        with col_c:
-            st.metric("Birth Location", result["birth_location"])
-        with col_d:
-            st.metric("Current Location", result["current_location"])
-
-        st.caption(f"Reading generated as of {result['parsed_current_datetime']}")
-        if result.get("report_focus"):
-            st.caption(f"Focus: {result['report_focus']}")
+        _birth_data_card(result)
         st.divider()
 
         # Chart wheels — regenerate SVGs if missing (e.g. loaded from saved charts where SVGs are stripped)
@@ -1073,9 +1235,12 @@ with natal_tab:
                 st.rerun()
 
         # Follow-up chat
-        st.divider()
-        st.subheader("💬 Ask a Follow-up Question")
-        st.caption("Ask anything about your chart, placements, timing, or guidance.")
+        st.markdown("""
+<div class="chat-section-header">
+  <p>Ask a Follow-up Question</p>
+  <small>Ask anything about your chart, placements, timing, or specific guidance.</small>
+</div>
+""", unsafe_allow_html=True)
 
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):
@@ -1098,8 +1263,9 @@ with natal_tab:
     else:
         st.markdown("""
         <div class="placeholder-panel">
-          <div class="icon">🔭</div>
-          <p>Fill in your birth details in the sidebar<br>and click <strong>Generate My Reading</strong> to begin.</p>
+          <div class="astro-glyph">☽ ☉ ↑</div>
+          <h3>Your Reading Awaits</h3>
+          <p>Enter your birth details in the sidebar<br>and click <strong>Generate My Reading</strong> to begin.</p>
         </div>
         """, unsafe_allow_html=True)
 
