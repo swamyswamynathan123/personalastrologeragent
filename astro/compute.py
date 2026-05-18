@@ -2186,40 +2186,56 @@ def compute_transit_calendar(
     Month-by-month transit calendar for the next N months.
     Returns a dict keyed by 'YYYY-MM' with sorted lists of transit events.
     Only outer transiting planets (Jupiter–Pluto) against all natal points.
+    Uses stored lat/lng from natal chart to avoid geocoding entirely.
     """
     from datetime import date, timedelta
 
     OUTER_PLANETS = ["jupiter", "saturn", "uranus", "neptune", "pluto"]
     NATAL_POINTS = list(_PLANETS) + ["ascendant", "midheaven", "north_node"]
-    ORB_ENTER = 1.5
+    # Match the orbs used by compute_upcoming_transits
+    ORB_ENTER = 2.0
     ORB_EXACT = 0.5
 
     natal_pos: dict[str, float] = {}
     for body in NATAL_POINTS:
         d = natal_chart.get(body)
-        if d and d.get("abs_pos") is not None:
-            natal_pos[body] = d["abs_pos"]
+        if d and isinstance(d, dict) and d.get("abs_pos") is not None:
+            natal_pos[body] = float(d["abs_pos"])
+
+    if not natal_pos:
+        return {}
+
+    # Use stored coordinates to skip geocoding on every step
+    lat = natal_chart.get("_current_lat") or natal_chart.get("_natal_lat") or 0.0
+    lng = natal_chart.get("_current_lng") or natal_chart.get("_natal_lng") or 0.0
+    use_coords = bool(lat or lng)
 
     current_date = date(current_year, current_month, current_day)
     end_date = current_date + timedelta(days=months_ahead * 30 + 15)
-    # 5-day steps balances accuracy vs. API calls (~75 steps for 12 months)
-    step = 5
+    step = 4  # 4-day steps: ~92 checks for 12 months, fast with cached coords
     check_dates = [
         current_date + timedelta(days=i)
         for i in range(0, (end_date - current_date).days + 1, step)
     ]
 
-    # key → event dict (track window from first to last seen, record exact date)
     transit_events: dict[str, dict] = {}
 
     for check_date in check_dates:
         try:
-            transit_subj = AstrologicalSubject(
-                name="Transit",
-                year=check_date.year, month=check_date.month, day=check_date.day,
-                hour=current_hour, minute=current_minute,
-                city=current_city, nation=current_nation, tz_str="UTC", online=True,
-            )
+            if use_coords:
+                transit_subj = AstrologicalSubject(
+                    name="Transit",
+                    year=check_date.year, month=check_date.month, day=check_date.day,
+                    hour=current_hour, minute=current_minute,
+                    lat=lat, lng=lng, tz_str="UTC", online=False,
+                )
+            else:
+                transit_subj = AstrologicalSubject(
+                    name="Transit",
+                    year=check_date.year, month=check_date.month, day=check_date.day,
+                    hour=current_hour, minute=current_minute,
+                    city=current_city, nation=current_nation, tz_str="UTC", online=True,
+                )
         except Exception:
             continue
 
@@ -2227,7 +2243,7 @@ def compute_transit_calendar(
             t_data = _safe_planet(transit_subj, t_planet)
             if not t_data or t_data.get("abs_pos") is None:
                 continue
-            t_pos = t_data["abs_pos"]
+            t_pos = float(t_data["abs_pos"])
             t_retro = t_data.get("retrograde", False)
 
             for n_planet, n_pos in natal_pos.items():
