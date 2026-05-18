@@ -106,7 +106,8 @@ html, body, [class*="css"] {
 }
 
 /* ── Secondary / default buttons ─────────────────────────────────── */
-.stButton > button[kind="secondary"] {
+.stButton > button[kind="secondary"],
+[data-testid="baseButton-secondary"] {
     background: #1e1e38 !important;
     border: 1px solid #3a3a60 !important;
     color: #d4bfff !important;
@@ -114,7 +115,8 @@ html, body, [class*="css"] {
     border-radius: 8px;
     transition: background 0.2s ease, border-color 0.2s ease;
 }
-.stButton > button[kind="secondary"]:hover {
+.stButton > button[kind="secondary"]:hover,
+[data-testid="baseButton-secondary"]:hover {
     background: #2a2a50 !important;
     border-color: #8866cc !important;
     color: #e8d8ff !important;
