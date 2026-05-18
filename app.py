@@ -1017,7 +1017,7 @@ _ASPECT_SYMBOLS = {
 def _render_transit_timeline(transit_passes: list[dict]) -> None:
     """Gantt-style plotly chart showing 12-month outer-planet transit passes."""
     if not transit_passes:
-        st.caption("No outer-planet transit passes computed yet.")
+        st.info("Transit timeline data not available. Click **↺ Regenerate Reading** in the My Reading tab to recompute your chart with timing data.")
         return
 
     try:
@@ -1070,7 +1070,7 @@ def _render_transit_timeline(transit_passes: list[dict]) -> None:
             + (f"Last exact: {r['end']}" if r["multi"] else "")
         )
         fig.add_trace(go.Bar(
-            x=[(r["end"] - r["start"]).days + 14],
+            x=[r["end"].isoformat()],
             y=[r["label"]],
             base=[r["start"].isoformat()],
             orientation="h",
