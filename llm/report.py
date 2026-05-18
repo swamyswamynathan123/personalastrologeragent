@@ -1039,9 +1039,238 @@ def _format_yogas(yogas: list[dict]) -> str:
         return "No major Vedic yogas detected in the sidereal chart."
     lines = []
     for y in yogas:
-        planets_str = " + ".join(p.replace("_", " ").title() for p in y["planets"])
         lines.append(f"- **{y['name']}** [{y['category']}] — {y['detail']}")
         lines.append(f"  {y['description']}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Nakshatra meanings for the Vedic Full Section
+# ---------------------------------------------------------------------------
+
+_NAKSHATRA_MEANINGS: dict[str, dict] = {
+    "Ashwini":      {"lord": "Ketu",    "deity": "Ashvins (divine physicians)", "quality": "swift healing, pioneering energy, fresh starts; impatience when unchecked"},
+    "Bharani":      {"lord": "Venus",   "deity": "Yama (god of death/dharma)",  "quality": "transformative depth, creative fertility, endurance through extremes; tendency toward excess"},
+    "Krittika":     {"lord": "Sun",     "deity": "Agni (fire god)",             "quality": "purifying fire, sharp discernment, leadership; critical perfectionism as shadow"},
+    "Rohini":       {"lord": "Moon",    "deity": "Brahma (creator)",            "quality": "sensuous beauty, creativity, material abundance, charm; possessiveness as shadow"},
+    "Mrigashira":   {"lord": "Mars",    "deity": "Soma (moon god)",             "quality": "curious seeking, gentle sensitivity, research gifts; restlessness, never fully satisfied"},
+    "Ardra":        {"lord": "Rahu",    "deity": "Rudra (storm god)",           "quality": "penetrating intellect, emotional storms, transformation through chaos; destructive when suppressed"},
+    "Punarvasu":    {"lord": "Jupiter", "deity": "Aditi (mother of gods)",      "quality": "renewal, optimism, philosophical wisdom, nurturing abundance; scattered focus"},
+    "Pushya":       {"lord": "Saturn",  "deity": "Brihaspati (Jupiter deity)",  "quality": "nourishment, devotion, community care, spiritual discipline; self-denial to fault"},
+    "Ashlesha":     {"lord": "Mercury", "deity": "Nagas (serpent beings)",      "quality": "penetrating perception, healing wisdom, strategic cunning; manipulative potential"},
+    "Magha":        {"lord": "Ketu",    "deity": "Pitrs (ancestral spirits)",   "quality": "royal authority, ancestral power, leadership presence; pride and elitism as shadow"},
+    "Purva Phalguni":{"lord": "Venus",  "deity": "Bhaga (god of delight)",      "quality": "pleasure, creative expression, love, relaxation gifts; indulgence without discipline"},
+    "Uttara Phalguni":{"lord": "Sun",   "deity": "Aryaman (god of patronage)",  "quality": "service through relationship, social grace, reliable partnerships; dependency shadow"},
+    "Hasta":        {"lord": "Moon",    "deity": "Savitar (solar deity)",       "quality": "skilled hands, healing craftsmanship, practical intelligence; anxiety, nervousness"},
+    "Chitra":       {"lord": "Mars",    "deity": "Tvashtr (divine architect)",  "quality": "aesthetic genius, architectural vision, brilliance; vanity, perfectionism"},
+    "Swati":        {"lord": "Rahu",    "deity": "Vayu (wind god)",             "quality": "independence, flexibility, entrepreneurial spirit; rootlessness, scattered ambition"},
+    "Vishakha":     {"lord": "Jupiter", "deity": "Indra-Agni (power deities)",  "quality": "focused purpose, determined ambition, spiritual-material integration; envy, impatience"},
+    "Anuradha":     {"lord": "Saturn",  "deity": "Mitra (god of friendship)",   "quality": "devotional loyalty, occult gifts, friendship depth; martyrdom, self-suppression"},
+    "Jyeshtha":     {"lord": "Mercury", "deity": "Indra (king of gods)",        "quality": "seniority wisdom, protective power, courageous leadership; jealousy, emotional volatility"},
+    "Mula":         {"lord": "Ketu",    "deity": "Nirrti (goddess of dissolution)", "quality": "radical truth-seeking, root-level transformation, philosophical depth; destruction of foundations"},
+    "Purva Ashadha":{"lord": "Venus",   "deity": "Apas (water goddess)",        "quality": "invincible will, purification, bold creative vision; stubbornness, inflexibility"},
+    "Uttara Ashadha":{"lord": "Sun",    "deity": "Vishvedevas (universal gods)", "quality": "lasting victory through righteousness, integrity, patient authority; isolation in high standards"},
+    "Shravana":     {"lord": "Moon",    "deity": "Vishnu (preserver)",          "quality": "receptive listening, learning mastery, connecting wisdom; gossip, over-analysis"},
+    "Dhanishtha":   {"lord": "Mars",    "deity": "Ashta Vasus (elemental gods)","quality": "musical rhythm, abundant gifts, group harmony, material success; greed, overextension"},
+    "Shatabhisha":  {"lord": "Rahu",    "deity": "Varuna (cosmic order god)",   "quality": "healing secrets, solitary research, radical independence; isolation, secretiveness"},
+    "Purva Bhadrapada":{"lord": "Jupiter","deity": "Aja Ekapada (unborn sun)", "quality": "visionary intensity, transformative fire, ascetic depth; fanaticism, extremism"},
+    "Uttara Bhadrapada":{"lord": "Saturn","deity": "Ahir Budhnya (serpent of depths)", "quality": "cosmic wisdom, compassionate depth, serpentine patience; withdrawal, fatalism"},
+    "Revati":       {"lord": "Mercury", "deity": "Pushan (nourishing sun)",     "quality": "protective guidance, spiritual completion, universal love; over-sensitivity, illusion"},
+}
+
+
+def _format_vedic_full(vedic: dict | None, chart: dict | None) -> str:
+    """Expanded Vedic section for the full report — nakshatra, navamsha, dasha, yogas."""
+    if not vedic:
+        return "Vedic (Jyotish) full analysis unavailable."
+
+    ayanamsa = vedic.get("ayanamsa", "?")
+    sid = vedic.get("sidereal") or {}
+    dasha = vedic.get("dasha") or {}
+    yogas = vedic.get("yogas") or []
+
+    lines = [f"*(Lahiri ayanamsa {ayanamsa}° applied — all positions are sidereal/tropical-shifted)*\n"]
+
+    # ── Core sidereal placements ──────────────────────────────────────
+    lines.append("**Sidereal Placements (D1 Rasi Chart)**")
+    key_bodies = [
+        ("Sun (Atma — soul signifier)", "sun"),
+        ("Moon (Manas — mind/instincts)", "moon"),
+        ("Ascendant / Lagna", "ascendant"),
+        ("Mercury", "mercury"), ("Venus", "venus"), ("Mars", "mars"),
+        ("Jupiter", "jupiter"), ("Saturn", "saturn"),
+    ]
+    for label, key in key_bodies:
+        d = sid.get(key)
+        if not d:
+            continue
+        nav = f" | D9 Navamsha: **{d['navamsha']}**" if d.get("navamsha") else ""
+        if key == "moon" and d.get("nakshatra"):
+            nak = d["nakshatra"]
+            nak_name = nak.get("name", "?")
+            pada = nak.get("pada", "?")
+            lord = nak.get("lord", "?").capitalize()
+            meaning = _NAKSHATRA_MEANINGS.get(nak_name, {})
+            quality = meaning.get("quality", "")
+            deity = meaning.get("deity", "")
+            lines.append(
+                f"- **{label}**: {d['sign']} {d['position']}°{nav}\n"
+                f"  Nakshatra: **{nak_name}** pada {pada} (lord: {lord}, deity: {deity})\n"
+                f"  *{quality}*"
+            )
+        else:
+            lines.append(f"- **{label}**: {d['sign']} {d['position']}°{nav}")
+
+    # ── Navamsha (D9) synopsis ────────────────────────────────────────
+    lines.append("\n**Navamsha (D9) — Soul & Dharma Chart**")
+    lines.append(
+        "The D9 shows the soul's deeper qualities, the dharmic purpose beneath surface personality, "
+        "and the deeper nature of marriages and partnerships. Planets strong in D9 deliver their gifts "
+        "reliably; weak or debilitated in D9 = the promise of the natal chart is harder to fulfill."
+    )
+    for label, key in key_bodies:
+        d = sid.get(key)
+        if d and d.get("navamsha"):
+            lines.append(f"- {label}: Navamsha {d['navamsha']}")
+
+    # ── Vimshottari Dasha ─────────────────────────────────────────────
+    if dasha:
+        maha = (dasha.get("mahadasha_lord") or "?").capitalize()
+        maha_end = (dasha.get("mahadasha_end") or "")[:10]
+        maha_rem = round(dasha.get("years_remaining_mahadasha", 0), 1)
+        maha_yrs = dasha.get("mahadasha_years", "?")
+        antar = (dasha.get("antardasha_lord") or "").capitalize()
+        antar_end = (dasha.get("antardasha_end") or "")[:10]
+        antar_rem = round(dasha.get("years_remaining_antardasha", 0), 1)
+
+        lines.append("\n**Vimshottari Dasha — Vedic Biographical Clock**")
+        lines.append(
+            f"- **Mahadasha (major period):** {maha} — {maha_yrs}-year period, ends {maha_end} "
+            f"({maha_rem} years remaining)\n"
+            f"  *Interpret {maha}'s natal sidereal condition to assess the quality of this entire period. "
+            f"A dignified {maha} delivers its significations constructively; debilitated = the themes arrive "
+            f"with friction and require intentional effort.*"
+        )
+        if antar:
+            lines.append(
+                f"- **Antardasha (sub-period):** {antar} within {maha} Mahadasha, ends {antar_end} "
+                f"({antar_rem} years remaining)\n"
+                f"  *{antar}'s sub-period adds its quality as a texture within the {maha} chapter — "
+                f"what {antar} signifies is in the foreground right now.*"
+            )
+
+    # ── Yogas ─────────────────────────────────────────────────────────
+    if yogas:
+        lines.append(f"\n**Vedic Yogas — {len(yogas)} Detected**")
+        lines.append(
+            "Yogas are special planetary combinations that amplify certain life themes. "
+            "Their strength depends on the dignity and house placement of the planets involved."
+        )
+        lines.append(_format_yogas(yogas))
+    else:
+        lines.append("\n**Vedic Yogas:** No major yogas detected in the sidereal chart.")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Top 5 timing windows (pre-computed from chart data layers)
+# ---------------------------------------------------------------------------
+
+_PLANET_PRIORITY = {"pluto": 1, "neptune": 2, "uranus": 3, "saturn": 4, "jupiter": 5}
+_POINT_PRIORITY = {
+    "ascendant": 1, "midheaven": 2, "sun": 3, "moon": 4,
+    "mercury": 5, "venus": 6, "mars": 7, "north_node": 8,
+    "jupiter": 9, "saturn": 10,
+}
+_ASPECT_STRENGTH = {"Conjunction": 1, "Opposition": 2, "Square": 3, "Trine": 4, "Sextile": 5}
+
+
+def _build_top5_timing_windows(chart: dict) -> str:
+    """Extract and rank the 5 most significant upcoming planetary events across all timing layers."""
+    events: list[dict] = []
+
+    # ── Transit passes (12-month outer planet transits, exact dates) ──
+    for p in chart.get("transit_passes") or []:
+        tp = p.get("transiting_planet", "")
+        np_ = p.get("natal_planet", "")
+        aspect = p.get("aspect", "")
+        passes = p.get("passes") or []
+        if not passes:
+            continue
+        # Score by planet priority + point priority + aspect strength
+        planet_score = _PLANET_PRIORITY.get(tp, 6)
+        point_score = _POINT_PRIORITY.get(np_, 11)
+        aspect_score = _ASPECT_STRENGTH.get(aspect, 6)
+        total_score = planet_score + point_score + aspect_score
+        first_pass = passes[0]
+        multi = len(passes) > 1
+        events.append({
+            "score": total_score,
+            "date": first_pass.get("date", "?"),
+            "layer": "Transit",
+            "description": (
+                f"**{tp.capitalize()} {aspect} your {np_.replace('_', ' ').title()}**"
+                + (f" — {len(passes)}-pass pattern (retro cycle)" if multi else "")
+                + f" | Exact: {first_pass.get('date', '?')}"
+                + (f" → {passes[-1].get('date', '?')}" if multi else "")
+                + f" (orb {first_pass.get('orb', '?')}°)"
+            ),
+        })
+
+    # ── Solar arc aspects (applying within 1°, milestone events) ──────
+    for a in chart.get("solar_arc_aspects") or []:
+        if not a.get("applying"):
+            continue
+        dp = a.get("directed_planet", "").replace("arc_", "").replace("_", " ").title()
+        np_ = a.get("natal_planet", "")
+        aspect = a.get("aspect", "")
+        orb = a.get("orb", 1.0)
+        point_score = _POINT_PRIORITY.get(np_, 11)
+        aspect_score = _ASPECT_STRENGTH.get(aspect, 6)
+        # Solar arcs are high value — 1° orb ≈ 1 year; orb tells how soon
+        months_approx = round(orb * 12)
+        events.append({
+            "score": point_score + aspect_score,
+            "date": f"~{months_approx} months",
+            "layer": "Solar Arc",
+            "description": (
+                f"**Solar Arc {dp} {aspect} natal {np_.replace('_', ' ').title()}**"
+                f" | ~{months_approx} months away (orb {orb}°, applying)"
+            ),
+        })
+
+    # ── Primary directions (applying < 1°, classical milestone) ───────
+    for d in chart.get("primary_directions") or []:
+        dp = d.get("directed_point", "")
+        np_ = d.get("natal_point", "")
+        aspect = d.get("aspect", "")
+        orb = d.get("orb", 1.0)
+        point_score = _POINT_PRIORITY.get(np_, 11)
+        dir_score = 1 if dp in ("Ascendant", "Midheaven") else 3
+        aspect_score = _ASPECT_STRENGTH.get(aspect, 6)
+        months_approx = round(float(orb) * 12)
+        events.append({
+            "score": dir_score + point_score + aspect_score,
+            "date": f"~{months_approx} months",
+            "layer": "Primary Direction",
+            "description": (
+                f"**Directed {dp} {aspect} natal {np_.replace('_', ' ').title()}**"
+                f" | ~{months_approx} months away (orb {orb}°) — classical biographical milestone"
+            ),
+        })
+
+    if not events:
+        return "No significant upcoming timing events detected within current orb windows."
+
+    # Sort ascending (lowest score = highest importance)
+    events.sort(key=lambda e: e["score"])
+    top5 = events[:5]
+
+    lines = ["| # | Layer | Timing | Event |", "|---|-------|--------|-------|"]
+    for i, ev in enumerate(top5, 1):
+        lines.append(f"| {i} | {ev['layer']} | {ev['date']} | {ev['description']} |")
+
     return "\n".join(lines)
 
 
@@ -1152,6 +1381,8 @@ def build_prompt(state: "AstrologerState") -> str:
         firdaria_section = "## Firdaria Time Lords\n" + _format_firdaria(chart.get("firdaria"), chart)
         solar_return_section = "## Solar Return Chart\n" + _format_solar_return(chart.get("solar_return") or {})
         vedic_section = "## Vedic (Jyotish) Overlay\n" + _format_vedic(chart.get("vedic"))
+        vedic_full_section = "## Vedic Full Analysis (for Section 9)\n" + _format_vedic_full(chart.get("vedic"), chart)
+        top5_timing_section = "## Top 5 Timing Windows (pre-ranked, for Section 8)\n" + _build_top5_timing_windows(chart)
         almuten_section = "## Almuten Figuris (Chart Master by Classical Dignities)\n" + _format_almuten_figuris(chart.get("almuten_figuris"))
         dispositor_section = "## Dispositor Tree (Sign Rulership Chain)\n" + _format_dispositor_tree(chart.get("dispositor_tree"))
         parallels_section = "## Parallel & Contra-Parallel Aspects (declination, 1° orb)\n" + _format_parallel_aspects(chart.get("parallel_aspects") or [], chart.get("declinations") or {})
@@ -1175,6 +1406,7 @@ def build_prompt(state: "AstrologerState") -> str:
             profection_section, firdaria_section, solar_return_section, lunar_return_section, vedic_section,
             almuten_section, dispositor_section, parallels_section, syzygy_section,
             minor_aspects_section, parans_section,
+            top5_timing_section, vedic_full_section,
         ])
     else:
         chart_section = "## Natal Chart\nChart computation was unavailable. Base interpretations on Sun sign and general astrology."
@@ -1185,7 +1417,7 @@ def build_prompt(state: "AstrologerState") -> str:
     if confidence in ("approximate", "unknown"):
         rectification_section = f"""
 
-**8. Narrowing Your Birth Time** *(Birth time marked as "{confidence}" — add this section)*
+**11. Narrowing Your Birth Time** *(Birth time marked as "{confidence}" — add this section)*
 Using the chart data above (Firdaria periods, profection years, and transit dates), give 3–4 specific life-event checkpoints this person can use to confirm their Ascendant. For example: "If [Firdaria lord] ruled a period when a major [house theme] event occurred around [year range], this confirms [Ascendant candidate]." Name the 2 most likely Ascendant signs given a ±{30 if confidence == "approximate" else 90}-minute birth time window around {state.get("birth_time", "the stated time")}. Close with: *"Once confirmed, regenerate this reading with 'exact' confidence for precise house-based interpretations."* Keep the section to 5–7 sentences."""
     else:
         rectification_section = ""
@@ -1204,7 +1436,7 @@ Using the chart data above (Firdaria periods, profection years, and transit date
     if has_focus:
         focus_section = f"""
 
-**8. Deep Dive: {focus}**
+**10. Deep Dive: {focus}**
 This section is dedicated exclusively to the focus areas requested: **{focus}**. For each focus area:
 - Identify the relevant natal houses and their current rulers
 - Name the most active transit, solar arc, or progressed aspect touching those houses right now
@@ -1215,7 +1447,7 @@ Do not repeat content from earlier sections — this is a deeper, focused lens o
     else:
         focus_section = ""
 
-    section_count = "8 sections" if has_focus else "7 sections"
+    section_count = "10 sections" if has_focus else "9 sections"
 
     return f"""You are a master Western astrologer writing a personalized reading for {state['full_name']}.
 
@@ -1323,6 +1555,23 @@ Each theme must be supported by at least 2 independent chart factors. Draw from 
 
 **7. Favorable Timing**
 Name 2–3 specific windows with approximate timing. For each: what it is good for and why (cite the activating aspect). If the progressed Moon changes signs within 6 months, name the transition as a fresh emotional chapter and what it opens up.
+
+**8. Top 5 Exact Timing Windows**
+Using ONLY the pre-ranked table in the "Top 5 Timing Windows" data section above, present the 5 most significant upcoming planetary events as a clear, scannable list. For each window:
+- State what the event is (transit/solar arc/direction) and its exact or approximate date
+- Name which life area is activated (use the relevant house theme and house ruler's condition)
+- Give one sentence of specific, actionable guidance for that window
+Format each entry as: **[Date/Timeframe]** — [Event] — *[What to do / what this activates]*
+If fewer than 5 events exist in the data, present all that are available.
+
+**9. Vedic Full Reading**
+Using the "Vedic Full Analysis" data section above, write a complete Jyotish interpretation:
+- **Moon's Nakshatra**: Name the nakshatra, its deity and ruling planet, and what it means for this person's instinctive nature and emotional style. This is the Vedic equivalent of the Moon sign — the most important Vedic datum.
+- **Sidereal Sun & Lagna**: How the sidereal Sun and Ascendant differ from the tropical positions, and what this adds or shifts in the person's self-expression and life direction.
+- **D9 Navamsha Synopsis**: What the soul-level Navamsha chart reveals about the person's deeper dharmic qualities, and whether the natal promise is strong or tested at the soul level.
+- **Vimshottari Dasha**: Interpret the current Mahadasha lord's natal sidereal condition (sign, house, dignity). What biographical chapter does this represent? Name the Antardasha sub-lord and the texture it adds within the major period. If the Dasha lord matches the Firdaria major lord or the profection lord of the year, state this as a cross-tradition convergence explicitly.
+- **Vedic Yogas**: For each yoga detected, name what it promises, evaluate its strength (based on the involved planets' dignity and house placement in the sidereal chart), and state whether it is likely to manifest strongly or is modified by other factors.
+Close with: "Western and Vedic systems read the same soul from different angles — where they agree, the theme is confirmed; where they diverge, you carry both stories simultaneously."
 {focus_section}{rectification_section}"""
 
 
