@@ -368,35 +368,58 @@ def _mock_completion(text):
     return resp
 
 
+def _mock_streaming_cm(text: str):
+    """Create a mock context manager yielding streaming chunks for the given text."""
+    chunks = []
+    for char in text:
+        chunk = MagicMock()
+        chunk.choices = [MagicMock()]
+        chunk.choices[0].delta.content = char
+        chunks.append(chunk)
+    # Trailing chunk with None content (signals end of stream)
+    tail = MagicMock()
+    tail.choices = [MagicMock()]
+    tail.choices[0].delta.content = None
+    chunks.append(tail)
+
+    cm = MagicMock()
+    cm.__enter__ = MagicMock(return_value=iter(chunks))
+    cm.__exit__ = MagicMock(return_value=False)
+    return cm
+
+
 @patch("llm.report.openai.OpenAI")
 def test_generate_report_stream_calls_three_passes(mock_openai_cls):
+    """Multi-call pipeline always makes exactly 3 streaming API calls."""
     mock_client = MagicMock()
     mock_openai_cls.return_value = mock_client
     mock_client.chat.completions.create.side_effect = [
-        _mock_completion("DRAFT"),      # pass 1
-        _mock_completion("REVIEWED"),   # pass 2
-        _mock_completion("FINAL"),      # pass 3
+        _mock_streaming_cm("PART ONE"),
+        _mock_streaming_cm("PART TWO"),
+        _mock_streaming_cm("PART THREE"),
     ]
 
     state = _state_with_chart()
-    chunks = list(generate_report_stream(state))
+    list(generate_report_stream(state))
     assert mock_client.chat.completions.create.call_count == 3
 
 
 @patch("llm.report.openai.OpenAI")
 def test_generate_report_stream_yields_final_text(mock_openai_cls):
+    """Text from all 3 streaming calls appears in the output."""
     mock_client = MagicMock()
     mock_openai_cls.return_value = mock_client
     mock_client.chat.completions.create.side_effect = [
-        _mock_completion("DRAFT"),
-        _mock_completion("REVIEWED"),
-        _mock_completion("LINE ONE\nLINE TWO"),
+        _mock_streaming_cm("IDENTITY SECTION"),
+        _mock_streaming_cm("TIMING SECTION"),
+        _mock_streaming_cm("VEDIC SECTION"),
     ]
 
     state = _state_with_chart()
     output = "".join(generate_report_stream(state))
-    assert "LINE ONE" in output
-    assert "LINE TWO" in output
+    assert "IDENTITY SECTION" in output
+    assert "TIMING SECTION" in output
+    assert "VEDIC SECTION" in output
 
 
 @patch("llm.report.openai.OpenAI")
@@ -404,7 +427,7 @@ def test_generate_report_stream_pass1_uses_high_temperature(mock_openai_cls):
     mock_client = MagicMock()
     mock_openai_cls.return_value = mock_client
     mock_client.chat.completions.create.side_effect = [
-        _mock_completion("D"), _mock_completion("R"), _mock_completion("F"),
+        _mock_streaming_cm("D"), _mock_streaming_cm("R"), _mock_streaming_cm("F"),
     ]
 
     list(generate_report_stream(_state_with_chart()))
@@ -414,18 +437,19 @@ def test_generate_report_stream_pass1_uses_high_temperature(mock_openai_cls):
 
 
 @patch("llm.report.openai.OpenAI")
-def test_generate_report_stream_no_chart_skips_pass3(mock_openai_cls):
-    """With no chart data, pass 3 (grounding) is skipped — only 2 LLM calls."""
+def test_generate_report_stream_always_makes_three_calls(mock_openai_cls):
+    """Pipeline always makes 3 focused calls — no chart data doesn't reduce call count."""
     mock_client = MagicMock()
     mock_openai_cls.return_value = mock_client
     mock_client.chat.completions.create.side_effect = [
-        _mock_completion("DRAFT"),
-        _mock_completion("REVIEWED"),
+        _mock_streaming_cm("PART1"),
+        _mock_streaming_cm("PART2"),
+        _mock_streaming_cm("PART3"),
     ]
 
     state = {**_BASE_STATE, "chart_data": None}
     list(generate_report_stream(state))
-    assert mock_client.chat.completions.create.call_count == 2
+    assert mock_client.chat.completions.create.call_count == 3
 
 
 # ===========================================================================

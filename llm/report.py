@@ -3041,6 +3041,289 @@ def _ground_report(report: str, state: "AstrologerState") -> str:
     return response.choices[0].message.content or report
 
 
+# ===========================================================================
+# Multi-call pipeline: 3 focused prompts for sections 1-3 / 4-7 / 8-10
+# ===========================================================================
+
+def _person_header(state: "AstrologerState") -> str:
+    focus = state.get("report_focus") or "general life reading"
+    additional = state.get("additional_info") or ""
+    add_line = f"\n- **Additional Context:** {additional}" if additional else ""
+    confidence = state.get("birth_time_confidence") or "exact"
+    return (
+        f"- **Full Name:** {state['full_name']}\n"
+        f"- **Date of Birth:** {state['parsed_dob']}\n"
+        f"- **Birth Location:** {state['birth_location']}\n"
+        f"- **Birth Time:** {state['birth_time']} ({state.get('birth_time_timezone', 'UTC')}) "
+        f"[Confidence: {confidence}]\n"
+        f"- **House System:** {state.get('house_system') or 'Placidus'}\n"
+        f"- **Current Location:** {state['current_location']}\n"
+        f"- **Report Date:** {state['parsed_current_datetime']}\n"
+        f"- **Report Focus:** {focus}{add_line}"
+    )
+
+
+def _build_identity_prompt(state: "AstrologerState") -> str:
+    """Sections 1-3: Personal Overview, Life Direction, Current Life Phase.
+    Data: natal placements + aspects + progressions. No timing layers."""
+    chart = state.get("chart_data") or {}
+    convergences = _compute_convergences(chart, state) if chart else []
+
+    convergence_block = ""
+    if convergences:
+        convergence_block = (
+            "\n## ⚡ Convergence Intelligence\n"
+            "These cross-system signals are the chart's loudest themes. Reference them in your sections:\n\n"
+            + "\n\n".join(f"▶ {c}" for c in convergences) + "\n"
+        )
+
+    confidence = state.get("birth_time_confidence") or "exact"
+    if confidence in ("approximate", "unknown"):
+        birth_time_note = (
+            f"\n**Birth Time Confidence: {confidence}** — treat Ascendant, house cusps, and "
+            "house-based interpretations as possibilities rather than certainties. Weight sign-based "
+            "interpretations more heavily."
+        )
+    else:
+        birth_time_note = ""
+
+    if not chart:
+        chart_data = "Chart computation was unavailable. Base sections on Sun sign and general astrology."
+    else:
+        placements = "\n".join([
+            "## Natal Placements",
+            _format_planet("Sun", chart.get("sun")),
+            _format_planet("Moon", chart.get("moon")),
+            f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
+            f"- Midheaven: {chart['midheaven']['sign']} {chart['midheaven']['position']}°" if chart.get("midheaven") else "- Midheaven: unavailable",
+            _format_planet("Mercury", chart.get("mercury")),
+            _format_planet("Venus", chart.get("venus")),
+            _format_planet("Mars", chart.get("mars")),
+            _format_planet("Jupiter", chart.get("jupiter")),
+            _format_planet("Saturn", chart.get("saturn")),
+            _format_planet("Uranus", chart.get("uranus")),
+            _format_planet("Neptune", chart.get("neptune")),
+            _format_planet("Pluto", chart.get("pluto")),
+            _format_planet("Chiron", chart.get("chiron")),
+        ])
+        chart_data = "\n\n".join([
+            placements,
+            "## Anaretic Degrees (29°)\n" + _format_anaretic_degrees(chart.get("anaretic_degrees") or []),
+            "## Fixed Star Conjunctions (1° orb)\n" + _format_fixed_stars(chart.get("fixed_stars") or []),
+            "## Chart Ruler\n" + _format_chart_ruler(chart.get("chart_ruler")),
+            "## Elemental & Modal Balance\n" + _format_balance(chart.get("balance") or {}),
+            "## Planetary Sect\n" + _format_sect(chart.get("sect") or {}),
+            "## Natal Lunar Phase\n" + _format_lunar_phase(chart.get("lunar_phase") or {}),
+            "## Part of Fortune\n" + _format_part_of_fortune(chart.get("part_of_fortune")),
+            _format_asteroids(chart),
+            "## Additional Arabic Parts\n" + _format_arabic_parts(chart.get("arabic_parts") or {}),
+            "## Antiscia & Contra-Antiscia (1.5° orb)\n" + _format_antiscia(chart.get("antiscia") or []),
+            "## Stelliums\n" + _format_stelliums(chart.get("stelliums") or []),
+            "## Mutual Receptions\n" + _format_mutual_receptions(chart.get("mutual_receptions") or []),
+            "## Lunar Nodes\n" + _format_nodes(chart),
+            "## House Rulerships & Cross-House Links\n" + _format_house_rulerships(chart),
+            "## Dignity Hierarchy\n" + _format_dignity_hierarchy(chart),
+            "## House Cusps\n" + _format_houses(chart.get("houses") or {}),
+            "## Natal Aspects\n" + _format_aspects(chart.get("aspects") or []),
+            "## Aspect Patterns\n" + _format_aspect_patterns(chart.get("aspect_patterns") or []),
+            "## Almuten Figuris\n" + _format_almuten_figuris(chart.get("almuten_figuris")),
+            "## Dispositor Tree\n" + _format_dispositor_tree(chart.get("dispositor_tree")),
+            "## Parallel & Contra-Parallel Aspects\n" + _format_parallel_aspects(chart.get("parallel_aspects") or [], chart.get("declinations") or {}),
+            "## Prenatal Lunation (Syzygy)\n" + _format_prenatal_syzygy(chart.get("prenatal_syzygy")),
+            "## Minor Aspects\n" + _format_minor_aspects(chart.get("minor_aspects") or []),
+            "## Parans\n" + _format_parans(chart.get("parans") or []),
+            "## Secondary Progressions\n" + _format_progressions(chart.get("progressions")),
+            "## Progressed Aspects to Natal Chart\n" + _format_progressed_aspects(chart.get("progressed_aspects") or []),
+        ])
+
+    return f"""You are a master astrologer. Write **Sections 1, 2, and 3** of a comprehensive natal reading for {state['full_name']}.
+Only use chart data provided. Do not invent placements or aspects.
+{convergence_block}
+## Person Details
+{_person_header(state)}{birth_time_note}
+
+{chart_data}
+
+## Interpretation Rules (apply to these 3 sections)
+- Dignity: domicile > exaltation > neutral > detriment > fall. Debilitated planets deliver their significations with friction, delay, or inner conflict — never describe as straightforwardly positive.
+- Aspect patterns (Grand Cross, T-Square, Grand Trine, Yod) are the structural spine of the chart — treat as load-bearing architecture. Name what the pattern DOES to this person's life before discussing individual planets.
+- House rulership chain: for any life-area statement, trace (1) relevant house, (2) its ruling planet, (3) that ruler's dignity and natal house, (4) current activations.
+- Antiscia: operate as hidden conjunctions (antiscia) or oppositions (contra-antiscia) across the solstice axis.
+- Progressed Sun/Moon = current psychological chapter. Name any progressed sign change within ±2 years and approximate year.
+- Almuten Figuris: the planet most fundamentally governing the whole person when it differs from the chart ruler.
+- Prenatal syzygy degree: the most sensitive degree in the entire chart — natal planets within 1° of it carry exceptional intensity.
+- Sect: out-of-sect malefics are the most destabilizing planet in the chart; name this explicitly.
+- Anaretic (29°) planets carry life-level urgency — a drive to resolve unfinished themes before the next sign chapter.
+- Fixed stars: only conjunctions (1° orb) matter. Royal Stars and Algol on luminaries/angles are life-defining.
+- Chiron: long-term wound and healing gift.
+- Parans: bind planets at the experiential level of lived life — Sun/Moon parans with outer planets are life-defining signatures.
+
+## Instructions
+Write in warm, direct language — speak TO {state['full_name']}, not ABOUT them. Every paragraph must name at least one specific planet, sign, degree, or house. Make clear statements; no hedging.
+
+**1. Personal Overview**
+Open with the natal lunar phase as their fundamental life archetype. Read Sun + Moon + Ascendant as a unified trio. Note the chart ruler's sign/house and dignity. If a fixed star conjuncts Sun, Moon, ASC, or chart ruler, name it as a life-defining quality. Name any anaretic (29°) planets or angles and their urgency theme. Name the out-of-sect malefic as a recurring friction source. If a stellium dominates, give it prominence. If the Almuten differs from the chart ruler, name it as the silent chart ruler. Close with elemental/modal balance as a temperament portrait.
+
+**2. Life Direction & Karmic Themes**
+North Node (sign + house) = the unfamiliar direction this soul stretches toward. South Node = ingrained gifts that become a comfort-zone trap. Place any aspect patterns here as structural life challenges or gifts — explain what the configuration does to this person's life trajectory. Integrate Chiron's wound/gift. If the prenatal syzygy degree contacts any natal planet within 1°, name that planet as carrying pre-birth intensity. If any antiscia connects a luminary to a malefic or benefic, note it here.
+
+**3. Current Life Phase**
+Progressed Sun sign/house = the psychological chapter underway. Progressed Moon = the emotional climate in force for ~2.5 years. Name any progressed sign change within ±2 years and the approximate year. Highlight applying progressed aspects within 0.5° as what is crystallizing right now. Name the progressed lunation phase and years-to-next-New-Moon as the psychological season."""
+
+
+def _build_timing_prompt(state: "AstrologerState") -> str:
+    """Sections 4-7: Cosmic Climate, Key Themes, Practical Guidance, Favorable Timing.
+    Data: all timing layers. Includes brief natal summary for Key Themes context."""
+    chart = state.get("chart_data") or {}
+    convergences = _compute_convergences(chart, state) if chart else []
+
+    convergence_block = ""
+    if convergences:
+        convergence_block = (
+            "\n## ⚡ Convergence Intelligence\n"
+            "These pre-computed signals are the chart's highest-priority themes:\n\n"
+            + "\n\n".join(f"▶ {c}" for c in convergences) + "\n"
+        )
+
+    if not chart:
+        chart_data = "Chart computation was unavailable."
+    else:
+        # Brief natal context for Key Themes cross-referencing
+        natal_summary = "\n".join([
+            "## Natal Context (for Key Themes grounding)",
+            _format_planet("Sun", chart.get("sun")),
+            _format_planet("Moon", chart.get("moon")),
+            f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°" if chart.get("ascendant") else "- Ascendant: unavailable",
+            _format_planet("Mars", chart.get("mars")),
+            _format_planet("Saturn", chart.get("saturn")),
+            "## Aspect Patterns\n" + _format_aspect_patterns(chart.get("aspect_patterns") or []),
+            "## Dignity Hierarchy\n" + _format_dignity_hierarchy(chart),
+            "## Stelliums\n" + _format_stelliums(chart.get("stelliums") or []),
+            "## Sect\n" + _format_sect(chart.get("sect") or {}),
+        ])
+        monthly_prof_line = _format_monthly_profection(chart.get("profection"))
+        profection_text = _format_profection(chart.get("profection"))
+        if monthly_prof_line:
+            profection_text += "\n" + monthly_prof_line
+
+        chart_data = "\n\n".join([
+            natal_summary,
+            "## Firdaria Time Lords\n" + _format_firdaria(chart.get("firdaria"), chart),
+            "## Annual Profection\n" + profection_text,
+            "## Vedic Dasha (for cross-tradition timing)\n" + _format_vedic(chart.get("vedic")),
+            "## Current Transits (as of report date)\n" + _format_transits(chart.get("transits") or []),
+            "## Upcoming Transits (next 90 days)\n" + _format_upcoming_transits(chart.get("upcoming_transits") or []),
+            "## Solar Arc Directions\n" + _format_solar_arcs(chart.get("solar_arcs") or {}),
+            "## Solar Arc Aspects to Natal Chart\n" + _format_solar_arc_aspects(chart.get("solar_arc_aspects") or []),
+            "## Primary Directions (Naibod arc, 1° orb)\n" + _format_primary_directions(chart.get("primary_directions") or []),
+            "## Eclipse Sensitivity (±6 months, 3° orb)\n" + _format_eclipse_sensitivity(chart.get("eclipse_sensitivity") or []),
+            "## Retrograde Stations (±180 days, 3° orb)\n" + _format_retrograde_stations(chart.get("retrograde_stations") or []),
+            "## Outer Planet Transits to Progressed Positions\n" + _format_transit_to_progressed(chart.get("transit_to_progressed") or []),
+            "## Solar Return Chart\n" + _format_solar_return(chart.get("solar_return") or {}),
+            "## Lunar Return (next ~27-day cycle)\n" + _format_lunar_return(chart.get("lunar_return") or {}),
+        ])
+
+    return f"""You are a master astrologer. Write **Sections 4, 5, 6, and 7** of a comprehensive natal reading for {state['full_name']}.
+Only use the timing data provided. Do not invent transits or aspects not listed.
+{convergence_block}
+## Person Details
+{_person_header(state)}
+
+{chart_data}
+
+## Interpretation Rules (apply to these 4 sections)
+- Firdaria: the major lord's natal condition determines the biographical chapter's quality. If the Firdaria major lord = profection lord of the year, flag as doubly activated.
+- Vimshottari Dasha: if the Mahadasha lord matches the Firdaria major lord, this is a profound cross-tradition convergence — state it explicitly as the chart's most dominant current theme.
+- Priority hierarchy: outer-planet transits/arcs to natal ASC/MC/Sun/Moon > outer to personal planets > inner planet transits.
+- Solar arc aspects within 1°: concrete external turning points (applying = within ~1 year).
+- Primary directions within 0.5° = biographical turning point unfolding now. Prioritize in Section 4.
+- Eclipse sensitivity: an eclipsed natal planet is in an accelerated change period for 6–12 months.
+- Retrograde station within 3° of natal point: far more potent than a standard transit — holds contact for weeks/months.
+- Lunar return: use to pinpoint WHEN within a year a transit or arc most concretely manifests — if a transit is active AND the LR Moon is in the same house as the transit's natal point, that month is the peak.
+- Solar return: SR Ascendant and angular planets are the dominant themes for the 12-month period from the return date.
+- Monthly profection: identifies the specific house arena activated each calendar month — use in Section 6 for specific timing advice.
+- Birth time confidence note: if "approximate" or "unknown", treat house-based timing more carefully.
+
+## Instructions
+Write in warm, direct language — speak TO {state['full_name']}, not ABOUT them. Every paragraph must name at least one specific planet, sign, degree, or house. Make clear statements; no hedging.
+
+**4. Current Cosmic Climate**
+Open with the three time lord layers: Firdaria major/sub period, Vimshottari Mahadasha/Antardasha, and profection year. State what each lord is doing natally. If the Firdaria lord and Vimshottari lord are the same planet, say so explicitly. Then present transits in priority order (outer planets to angles/luminaries first). For each significant transit, name: natal planet hit, house it rules, life area activated, approximate duration. Distinguish solar arc milestones from transiting weather. If 3+ layers converge on one theme, say so directly.
+
+**5. Key Life Themes** (exactly 3–4 themes)
+Each theme must be supported by at least 2 independent chart factors — draw from aspect patterns, natal dignity extremes, stelliums, sect status, and current timing activations. Name tensions honestly.
+
+**6. Practical Guidance**
+3–4 specific, actionable items. Each tied to a specific applying transit, solar arc, or progressed aspect with an approximate timeframe. Where the profection lord is involved, connect explicitly. Use the lunar return and monthly profection for the most specific monthly timing ("In [month], House [N] is activated — the optimal time for...").
+
+**7. Favorable Timing**
+Name 2–3 specific windows with approximate timing. For each: what it is good for and why (cite the activating aspect). If the progressed Moon changes signs within 6 months, name the transition as a fresh emotional chapter."""
+
+
+def _build_advanced_prompt(state: "AstrologerState") -> str:
+    """Sections 8-10: Top 5 Timing Windows, Vedic Full Reading, optional Focus Deep Dive."""
+    chart = state.get("chart_data") or {}
+    focus = state.get("report_focus") or "general life reading"
+    has_focus = bool(focus and focus != "general life reading")
+
+    if not chart:
+        chart_data = "Chart computation was unavailable."
+    else:
+        chart_data = "\n\n".join([
+            "## Transit Passes — Full 12-Month Pattern (outer planets, 0.5° exact orb)\n" + _format_transit_passes(chart.get("transit_passes") or []),
+            "## Top 5 Timing Windows (pre-ranked)\n" + _build_top5_timing_windows(chart),
+            "## Vedic Full Analysis\n" + _format_vedic_full(chart.get("vedic"), chart),
+        ])
+
+    focus_instruction = ""
+    if has_focus:
+        focus_instruction = f"""
+
+**10. Deep Dive: {focus}**
+Dedicated exclusively to: **{focus}**. For each focus area:
+- Identify the relevant natal houses and their current rulers
+- Name the most active transit, solar arc, or progressed aspect touching those houses right now
+- Give specific, concrete guidance tailored to this exact focus area
+- State the single most important planetary indicator for this topic at this moment
+Do not repeat content from earlier sections — this is a deeper, focused lens."""
+
+    section_count = "Sections 8, 9, and 10" if has_focus else "Sections 8 and 9"
+
+    return f"""You are a master astrologer. Write **{section_count}** of a comprehensive natal reading for {state['full_name']}.
+Only use the data provided. Do not invent timing events or yogas not listed.
+
+## Person Details
+{_person_header(state)}
+
+{chart_data}
+
+## Interpretation Rules
+- Transit passes (multi-pass): first direct pass = theme enters awareness; retrograde pass = deepest internal processing; final direct pass = integration. Give all dates when multi-pass is present.
+- Vedic Yogas: Pancha Mahapurusha, Gajakesari, Raj Yogas, Neecha Bhanga — name what each promises and evaluate its strength based on involved planets' dignity and house.
+- Nakshatra: the Vedic Moon nakshatra is the most important Vedic datum — governs Vimshottari timing and instinctive nature.
+- D9 Navamsha: reveals soul-level qualities and dharmic direction.
+- Western and Vedic systems read the same soul from different angles — where they agree, confirm; where they diverge, name both.
+
+## Instructions
+Write in warm, direct language. Make clear statements grounded in the data.
+
+**8. Top 5 Exact Timing Windows**
+Using the pre-ranked "Top 5 Timing Windows" table above, present the 5 most significant upcoming planetary events as a clear, scannable list. For each:
+- State what the event is (transit/solar arc/direction) and its exact or approximate date
+- Name which life area is activated (relevant house theme + ruler's condition)
+- Give one sentence of specific, actionable guidance
+Format each entry as: **[Date/Timeframe]** — [Event] — *[What to do / what this activates]*
+
+**9. Vedic Full Reading**
+Using the "Vedic Full Analysis" data above, write a complete Jyotish interpretation:
+- **Moon's Nakshatra**: Name the nakshatra, its deity and ruling planet, what it means for this person's instinctive nature and emotional style.
+- **Sidereal Sun & Lagna**: How sidereal positions differ from tropical, and what this adds to self-expression and life direction.
+- **D9 Navamsha Synopsis**: What the soul-level Navamsha reveals about dharmic qualities and whether the natal promise is strong or tested.
+- **Vimshottari Dasha**: Interpret the Mahadasha lord's sidereal condition. What biographical chapter does this represent? Name the Antardasha sub-lord and its texture. If the Dasha lord matches the Firdaria major lord or profection lord, state this as a cross-tradition convergence.
+- **Vedic Yogas**: For each yoga, name what it promises, evaluate its strength, state whether it manifests strongly or is modified.
+Close with: "Western and Vedic systems read the same soul from different angles — where they agree, the theme is confirmed; where they diverge, you carry both stories simultaneously."{focus_instruction}"""
+
+
 def generate_report(state: "AstrologerState") -> str:
     """Blocking three-pass report: draft → structural review → factual grounding."""
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -3059,7 +3342,16 @@ def generate_report(state: "AstrologerState") -> str:
 
 
 def generate_report_stream(state: "AstrologerState"):
-    """Three-pass pipeline: draft → structural review → factual grounding → stream."""
+    """Multi-call streaming pipeline: 3 focused LLM calls streamed in real time.
+
+    Call 1 → Sections 1-3 (identity, soul, current life phase)
+    Call 2 → Sections 4-7 (cosmic climate, themes, guidance, timing)
+    Call 3 → Sections 8-10 (timing windows, Vedic full, optional focus)
+
+    Each call streams word-by-word as it generates. User sees Part 1 complete
+    before Part 2 even starts, giving genuine progressive feedback.
+    Cached result is served as a fast line-by-line replay on subsequent requests.
+    """
     from cache.report_cache import make_report_key, get_report, set_report
 
     _current_date = (state.get("parsed_current_datetime") or "")[:10]
@@ -3081,30 +3373,37 @@ def generate_report_stream(state: "AstrologerState"):
         return
 
     client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    full_text = ""
 
-    # Pass 1: generate draft
-    draft_resp = client.chat.completions.create(
-        model="gpt-4o",
-        max_tokens=4096,
-        temperature=0.7,
-        messages=[
-            {"role": "system", "content": _REPORT_SYSTEM},
-            {"role": "user", "content": build_prompt(state)},
-        ],
-    )
-    draft = draft_resp.choices[0].message.content or ""
+    _calls = [
+        (_build_identity_prompt(state), 4096, "Sections 1–3: Personal Overview, Life Direction & Current Phase"),
+        (_build_timing_prompt(state),   4096, "Sections 4–7: Cosmic Climate, Key Themes, Guidance & Timing"),
+        (_build_advanced_prompt(state), 4096, "Sections 8–10: Timing Windows, Vedic Analysis & Focus"),
+    ]
 
-    # Pass 2: structural self-review
-    reviewed = _review_report(draft, state)
+    for i, (prompt, max_tok, label) in enumerate(_calls):
+        if i > 0:
+            sep = "\n\n---\n\n"
+            full_text += sep
+            yield sep
 
-    # Pass 3: factual grounding against raw chart data
-    final = _ground_report(reviewed, state)
+        with client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=max_tok,
+            temperature=0.7,
+            stream=True,
+            messages=[
+                {"role": "system", "content": _REPORT_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+        ) as stream:
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta is not None:
+                    full_text += delta
+                    yield delta
 
-    set_report(_cache_key, final)
-
-    # Stream the final verified text line by line
-    for line in final.split("\n"):
-        yield line + "\n"
+    set_report(_cache_key, full_text)
 
 
 # ===========================================================================
