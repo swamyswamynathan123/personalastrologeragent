@@ -1082,10 +1082,20 @@ def _render_transit_timeline(transit_passes: list[dict]) -> None:
             showlegend=False,
         ))
 
-    fig.add_vline(
-        x=today.isoformat(), line_dash="dot",
-        line_color="#ffffff", opacity=0.4,
-        annotation_text="Today", annotation_font_color="#ccbbee",
+    fig.add_shape(
+        type="line",
+        x0=today.isoformat(), x1=today.isoformat(),
+        y0=0, y1=1,
+        xref="x", yref="paper",
+        line=dict(color="#ffffff", width=1, dash="dot"),
+        opacity=0.4,
+    )
+    fig.add_annotation(
+        x=today.isoformat(), y=1,
+        xref="x", yref="paper",
+        text="Today", showarrow=False,
+        font=dict(color="#ccbbee", size=11),
+        xanchor="left", yanchor="bottom",
     )
 
     fig.update_layout(
