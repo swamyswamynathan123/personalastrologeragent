@@ -116,6 +116,36 @@ def _md_to_flowables(text: str, styles) -> list:
     return flowables
 
 
+def _resolve_css_vars(svg_str: str) -> str:
+    """Replace CSS custom properties (var(--x)) with their literal values.
+
+    svglib cannot evaluate CSS variables, so we extract the definitions from
+    the SVG's own <style>/:root block and inline them before rendering.
+    """
+    # Collect variable definitions from the <style> block's :root { } section
+    css_vars: dict[str, str] = {}
+    style_match = re.search(r"<style[^>]*>(.*?)</style>", svg_str, re.DOTALL | re.IGNORECASE)
+    if style_match:
+        root_match = re.search(r":root\s*\{([^}]+)\}", style_match.group(1), re.DOTALL)
+        if root_match:
+            for m in re.finditer(r"(--[\w-]+)\s*:\s*([^;]+);", root_match.group(1)):
+                css_vars[m.group(1).strip()] = m.group(2).strip()
+
+    if not css_vars:
+        return svg_str
+
+    def _sub(match: re.Match) -> str:
+        var_name = match.group(1).strip()
+        fallback = (match.group(2) or "").strip() or "#000000"
+        return css_vars.get(var_name, fallback)
+
+    return re.sub(
+        r"var\(\s*(--[\w-]+)\s*(?:,\s*([^)]+))?\s*\)",
+        _sub,
+        svg_str,
+    )
+
+
 def _svg_flowable(svg_str: str, max_width_pts: float = _PAGE_WIDTH_PTS):
     """Convert an SVG string to a scaled reportlab Drawing, or return None on failure."""
     try:
@@ -123,10 +153,11 @@ def _svg_flowable(svg_str: str, max_width_pts: float = _PAGE_WIDTH_PTS):
         import os
         from svglib.svglib import svg2rlg
 
+        resolved = _resolve_css_vars(svg_str)
         with tempfile.NamedTemporaryFile(
             suffix=".svg", delete=False, mode="w", encoding="utf-8"
         ) as f:
-            f.write(svg_str)
+            f.write(resolved)
             tmp_path = f.name
         try:
             drawing = svg2rlg(tmp_path)
