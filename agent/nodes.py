@@ -107,8 +107,18 @@ def normalize_and_parse(state: "AstrologerState") -> dict:
     }
 
 
-def compute_astro(state: "AstrologerState") -> dict:
-    """Node 5 (optional): Compute natal chart via kerykeion. Gracefully degrades on failure."""
+def compute_astro(state: "AstrologerState", _progress_cb=None) -> dict:
+    """Node 5: Compute natal chart via kerykeion. Gracefully degrades on failure.
+
+    _progress_cb: optional callable(str) — called with step descriptions for UI progress.
+    """
+    def _step(msg: str) -> None:
+        if _progress_cb:
+            try:
+                _progress_cb(msg)
+            except Exception:
+                pass
+
     try:
         from cache.report_cache import make_chart_key, get_chart, set_chart
         _current_date = (state.get("parsed_current_datetime") or "")[:10]
@@ -123,6 +133,7 @@ def compute_astro(state: "AstrologerState") -> dict:
         )
         _cached = get_chart(_cache_key)
         if _cached:
+            _step("⚡ Chart loaded from cache")
             return {"chart_data": _cached}
     except Exception:
         _cache_key = None
@@ -151,6 +162,7 @@ def compute_astro(state: "AstrologerState") -> dict:
         nation = location_parts[-1] if len(location_parts) > 1 else ""
         house_system = state.get("house_system") or "Placidus"
 
+        _step("⭐ Computing natal chart positions...")
         chart = compute_chart(
             full_name=state["full_name"],
             birth_year=birth_dt.year,
@@ -167,6 +179,7 @@ def compute_astro(state: "AstrologerState") -> dict:
         chart["aspects"] = compute_aspects(chart)
         chart["aspect_patterns"] = compute_aspect_patterns(chart, chart["aspects"])
 
+        _step("🌊 Mapping current transits...")
         try:
             current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
             current_parts = [p.strip() for p in state["current_location"].split(",")]
@@ -186,6 +199,7 @@ def compute_astro(state: "AstrologerState") -> dict:
         except Exception:
             chart["transits"] = []
 
+        _step("🔭 Scanning upcoming transits (90 days)...")
         try:
             current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
             current_parts = [p.strip() for p in state["current_location"].split(",")]
@@ -200,6 +214,7 @@ def compute_astro(state: "AstrologerState") -> dict:
         except Exception:
             chart["upcoming_transits"] = []
 
+        _step("📈 Computing progressions & solar arcs...")
         try:
             current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
             chart["progressions"] = compute_progressions(
@@ -326,6 +341,8 @@ def compute_astro(state: "AstrologerState") -> dict:
         except Exception:
             chart["transit_to_progressed"] = []
 
+        _step("🌙 Computing Vedic overlay & time lords...")
+        _step("🎨 Rendering chart wheels...")
         try:
             chart["chart_svg"] = generate_chart_svg(
                 full_name=state["full_name"],
@@ -379,6 +396,7 @@ def compute_astro(state: "AstrologerState") -> dict:
         except Exception:
             chart["transit_svg"] = ""
 
+        _step("🎯 Computing primary directions & transit passes...")
         try:
             chart["primary_directions"] = compute_primary_directions(
                 natal_chart=chart,

@@ -642,8 +642,33 @@ if submitted:
             "final_report": None,
         }
 
-        with st.spinner("Computing your chart... ✨"):
-            prepared = prepare_graph.invoke(payload)
+        from agent.nodes import (
+            ingest_inputs as _ingest, validate_required_fields as _validate,
+            normalize_and_parse as _normalize, request_follow_up as _follow_up,
+            compute_astro as _compute_astro,
+        )
+        with st.status("Consulting the stars...", expanded=True) as _status:
+            _status.write("🔮 Validating your birth details...")
+            _s = {**payload, **_ingest(payload)}
+            _s = {**_s, **_validate(_s)}
+            if _s.get("missing_fields") or _s.get("validation_errors"):
+                _s = {**_s, **_follow_up(_s)}
+                prepared = _s
+            else:
+                _status.write("📅 Parsing birth time & timezone...")
+                _norm = _normalize(_s)
+                _s = {**_s, **_norm}
+                if _s.get("validation_errors"):
+                    _s = {**_s, **_follow_up(_s)}
+                    prepared = _s
+                else:
+                    _chart = _compute_astro(_s, _progress_cb=_status.write)
+                    _s = {**_s, **_chart}
+                    prepared = _s
+            _status.update(
+                label="Chart ready! ✨" if prepared.get("parsed_birth_datetime") else "Please review the details below.",
+                state="complete" if prepared.get("parsed_birth_datetime") else "error",
+            )
 
         if prepared.get("follow_up_message"):
             st.session_state.validation_message = prepared["follow_up_message"]
@@ -840,6 +865,34 @@ with natal_tab:
                     )
             st.divider()
 
+        # Regenerate report button
+        _regen_col, _ = st.columns([1, 3])
+        with _regen_col:
+            if st.button("↺ Regenerate Reading", type="secondary", help="Regenerate with current focus & context settings"):
+                from cache.report_cache import make_report_key, delete_report as _del_report
+                _new_focus = ", ".join(st.session_state.get("f_report_focus") or []) or None
+                _rk = make_report_key(
+                    dob=result.get("parsed_dob") or "",
+                    birth_location=result.get("birth_location") or "",
+                    birth_time=result.get("birth_time") or "",
+                    birth_time_timezone=result.get("birth_time_timezone") or "UTC",
+                    house_system=result.get("house_system") or "Placidus",
+                    current_location=result.get("current_location") or "",
+                    current_date=(result.get("parsed_current_datetime") or "")[:10],
+                    report_focus=_new_focus or "",
+                    additional_info=result.get("additional_info") or "",
+                )
+                _del_report(_rk)
+                st.session_state._prepared_state = {
+                    **result,
+                    "report_focus": _new_focus,
+                    "current_datetime": datetime.now(pytz.UTC).isoformat(),
+                    "parsed_current_datetime": datetime.now(pytz.UTC).isoformat(),
+                }
+                st.session_state.report_result = None
+                st.session_state._stream_error = None
+                st.rerun()
+
         # House system mismatch warning
         if result.get("house_system") and result.get("house_system") != house_system:
             st.info(
@@ -945,6 +998,112 @@ with natal_tab:
           <p>Fill in your birth details in the sidebar<br>and click <strong>Generate My Reading</strong> to begin.</p>
         </div>
         """, unsafe_allow_html=True)
+
+_PLANET_COLORS = {
+    "jupiter": "#44bb88",
+    "saturn":  "#aaaacc",
+    "uranus":  "#66ccdd",
+    "neptune": "#7788dd",
+    "pluto":   "#cc6677",
+}
+_ASPECT_SYMBOLS = {
+    "Conjunction": "☌", "Sextile": "✶", "Trine": "△",
+    "Square": "□", "Opposition": "☍",
+}
+
+
+def _render_transit_timeline(transit_passes: list[dict]) -> None:
+    """Gantt-style plotly chart showing 12-month outer-planet transit passes."""
+    if not transit_passes:
+        st.caption("No outer-planet transit passes computed yet.")
+        return
+
+    try:
+        import plotly.graph_objects as go
+        from datetime import date as _date, timedelta
+    except ImportError:
+        st.caption("Install plotly to view the timeline chart.")
+        return
+
+    today = _date.today()
+    rows = []
+    for p in transit_passes:
+        tp = p.get("transiting_planet", "")
+        np_ = p.get("natal_planet", "").replace("_", " ").title()
+        aspect = p.get("aspect", "")
+        passes = p.get("passes") or []
+        if not passes:
+            continue
+        try:
+            start = _date.fromisoformat(passes[0]["date"])
+            end = _date.fromisoformat(passes[-1]["date"]) if len(passes) > 1 else start + timedelta(days=14)
+        except (KeyError, ValueError):
+            continue
+        sym = _ASPECT_SYMBOLS.get(aspect, "·")
+        label = f"{tp.capitalize()} {sym} {np_}"
+        multi = len(passes) > 1
+        rows.append({
+            "label": label,
+            "start": start,
+            "end": end,
+            "planet": tp,
+            "multi": multi,
+            "passes": len(passes),
+        })
+
+    if not rows:
+        st.caption("No transit pass dates available to plot.")
+        return
+
+    rows.sort(key=lambda r: r["start"])
+
+    fig = go.Figure()
+    for i, r in enumerate(rows):
+        color = _PLANET_COLORS.get(r["planet"], "#9988bb")
+        width = 18 if r["multi"] else 10
+        hover = (
+            f"<b>{r['label']}</b><br>"
+            f"{'Multi-pass (' + str(r['passes']) + ' exact contacts)' if r['multi'] else 'Single pass'}<br>"
+            f"First exact: {r['start']}<br>"
+            + (f"Last exact: {r['end']}" if r["multi"] else "")
+        )
+        fig.add_trace(go.Bar(
+            x=[(r["end"] - r["start"]).days + 14],
+            y=[r["label"]],
+            base=[r["start"].isoformat()],
+            orientation="h",
+            marker_color=color,
+            marker_line_color=color,
+            marker_opacity=0.85,
+            width=width,
+            hovertemplate=hover + "<extra></extra>",
+            showlegend=False,
+        ))
+
+    fig.add_vline(
+        x=today.isoformat(), line_dash="dot",
+        line_color="#ffffff", opacity=0.4,
+        annotation_text="Today", annotation_font_color="#ccbbee",
+    )
+
+    fig.update_layout(
+        height=max(250, len(rows) * 32 + 80),
+        margin=dict(l=0, r=20, t=20, b=40),
+        paper_bgcolor="#12122a",
+        plot_bgcolor="#12122a",
+        font=dict(color="#c8b8e8", family="Georgia, serif", size=12),
+        xaxis=dict(
+            type="date",
+            range=[today.isoformat(), (today + timedelta(days=365)).isoformat()],
+            gridcolor="#2e2e4e",
+            tickformat="%b %Y",
+            tickcolor="#6655aa",
+        ),
+        yaxis=dict(gridcolor="#2e2e4e", autorange="reversed"),
+        barmode="overlay",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
 
 _ASPECT_NATURE = {
     "conjunction": ("neutral", "☌", "#7788dd"),
@@ -1154,7 +1313,16 @@ with calendar_tab:
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.markdown("### 🗓️ 12-Month Outer-Planet Transit Calendar")
+        st.markdown("### 📊 12-Month Transit Timeline")
+        st.caption(
+            "Each bar shows when an outer planet forms a major aspect to a natal point. "
+            "Wider bars = multi-pass (retrograde) transits. Hover for exact dates."
+        )
+        _timeline_passes = (result_for_cal.get("chart_data") or {}).get("transit_passes") or []
+        _render_transit_timeline(_timeline_passes)
+
+        st.divider()
+        st.markdown("### 🗓️ Month-by-Month Transit Calendar")
         st.caption(
             "Shows when Jupiter, Saturn, Uranus, Neptune, and Pluto form major aspects "
             "to your natal points over the next 12 months. ℞ = planet is retrograde."
