@@ -1200,7 +1200,8 @@ Using the chart data above (Firdaria periods, profection years, and transit date
             + "\n"
         )
 
-    if focus and focus != "general life reading":
+    has_focus = bool(focus and focus != "general life reading")
+    if has_focus:
         focus_section = f"""
 
 **8. Deep Dive: {focus}**
@@ -1213,6 +1214,8 @@ Do not repeat content from earlier sections — this is a deeper, focused lens o
 """
     else:
         focus_section = ""
+
+    section_count = "8 sections" if has_focus else "7 sections"
 
     return f"""You are a master Western astrologer writing a personalized reading for {state['full_name']}.
 
@@ -1298,7 +1301,7 @@ Only use the chart data provided — do NOT invent placements, transits, or aspe
 ## Report Instructions
 Write in warm, direct, personal language — speak TO this person, not ABOUT them. Every paragraph must name at least one specific planet, sign, degree, or house. Do not list placements — interpret them. Do not use hedging phrases like "might suggest" or "could indicate" — make clear statements grounded in the data.
 
-Write these 7 sections:
+Write these {section_count}:
 
 **1. Personal Overview**
 Open with the natal lunar phase as their fundamental life archetype. Then read Sun + Moon + Ascendant as a unified trio — what does this combination create? Note the chart ruler's sign/house and dignity: it colours the entire chart. If a fixed star conjuncts the Sun, Moon, Ascendant, or chart ruler, name it here as a life-defining quality. If any anaretic (29°) planets or angles exist, name the urgency theme. Name the out-of-sect malefic (if any) as a recurring source of friction. If a stellium dominates, give it prominence. Close with elemental/modal balance as an overall temperament portrait.
