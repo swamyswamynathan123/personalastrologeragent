@@ -105,6 +105,25 @@ html, body, [class*="css"] {
     stroke: #c8a8f8 !important;
 }
 
+/* ── Tooltip popup content ───────────────────────────────────────── */
+[data-testid="stTooltipContent"],
+div[role="tooltip"],
+div[role="tooltip"] div,
+div[role="tooltip"] p,
+div[role="tooltip"] span {
+    background-color: #2a2a4a !important;
+    color: #e8e0d0 !important;
+    border: 1px solid #4a4a70 !important;
+    border-radius: 6px !important;
+    font-size: 0.85rem !important;
+    line-height: 1.5 !important;
+    padding: 0.5rem 0.75rem !important;
+}
+[data-testid="stTooltipContent"] p,
+[data-testid="stTooltipContent"] span {
+    color: #e8e0d0 !important;
+}
+
 /* ── Primary button ──────────────────────────────────────────────── */
 .stButton > button[kind="primary"],
 .stFormSubmitButton > button[kind="primary"] {
