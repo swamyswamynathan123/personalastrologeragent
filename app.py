@@ -566,6 +566,10 @@ if "_overall_forecast" not in st.session_state:
     st.session_state._overall_forecast = None
 if "_overall_forecast_year" not in st.session_state:
     st.session_state._overall_forecast_year = None
+if "_natal_pdf_cache" not in st.session_state:
+    st.session_state._natal_pdf_cache = {"key": None, "bytes": None}
+if "_synastry_pdf_cache" not in st.session_state:
+    st.session_state._synastry_pdf_cache = {"key": None, "bytes": None}
 
 # Drain a pending chart load into widget keys before any widget is instantiated
 if st.session_state._pending_load is not None:
@@ -1199,6 +1203,18 @@ with natal_tab:
 
         from export.pdf import natal_pdf as _natal_pdf
         _safe_name = result["full_name"].replace(" ", "_")
+
+        # Build PDF bytes once per unique reading; skip svglib on every rerender.
+        _pdf_key = f"{result.get('full_name')}|{result.get('parsed_dob')}|{result.get('parsed_birth_datetime')}"
+        _cache = st.session_state._natal_pdf_cache
+        if _cache["key"] != _pdf_key or _cache["bytes"] is None:
+            try:
+                _cache["bytes"] = _natal_pdf({**result, "chart_data": _cd1})
+                _cache["key"] = _pdf_key
+            except Exception:
+                _cache["bytes"] = None
+        _pdf_bytes = _cache["bytes"]
+
         dl_col1, dl_col2, dl_col3 = st.columns(3)
         with dl_col1:
             st.download_button(
@@ -1215,17 +1231,14 @@ with natal_tab:
                 mime="text/html",
             )
         with dl_col3:
-            try:
-                # Pass _cd1 so the PDF gets SVGs whether freshly generated or
-                # regenerated after loading from the database (which strips SVGs).
-                _pdf_bytes = _natal_pdf({**result, "chart_data": _cd1})
+            if _pdf_bytes:
                 st.download_button(
                     label="Download as PDF",
                     data=_pdf_bytes,
                     file_name=f"reading_{_safe_name}.pdf",
                     mime="application/pdf",
                 )
-            except Exception:
+            else:
                 st.caption("PDF export unavailable")
 
         # Save reading
@@ -1835,6 +1848,18 @@ with synastry_tab:
 
             from export.pdf import synastry_pdf as _synastry_pdf
             _syn_safe = f"synastry_{syn['name_a'].replace(' ', '_')}_{syn['name_b'].replace(' ', '_')}"
+
+            # Cache synastry PDF so svglib only runs once per unique pair.
+            _syn_pdf_key = f"{syn.get('name_a')}|{syn.get('dob_a')}|{syn.get('name_b')}|{syn.get('dob_b')}"
+            _syn_cache = st.session_state._synastry_pdf_cache
+            if _syn_cache["key"] != _syn_pdf_key or _syn_cache["bytes"] is None:
+                try:
+                    _syn_cache["bytes"] = _synastry_pdf(syn)
+                    _syn_cache["key"] = _syn_pdf_key
+                except Exception:
+                    _syn_cache["bytes"] = None
+            _syn_pdf_bytes = _syn_cache["bytes"]
+
             syn_dl1, syn_dl2, syn_dl3 = st.columns(3)
             with syn_dl1:
                 st.download_button(
@@ -1851,15 +1876,14 @@ with synastry_tab:
                     mime="text/html",
                 )
             with syn_dl3:
-                try:
-                    _syn_pdf_bytes = _synastry_pdf(syn)
+                if _syn_pdf_bytes:
                     st.download_button(
                         label="Download as PDF",
                         data=_syn_pdf_bytes,
                         file_name=f"{_syn_safe}.pdf",
                         mime="application/pdf",
                     )
-                except Exception:
+                else:
                     st.caption("PDF export unavailable")
 
             # Save synastry
