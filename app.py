@@ -76,6 +76,17 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] h6 {
     color: #d4bfff !important;
 }
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] li,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span {
+    color: #e8e0d0 !important;
+}
+[data-testid="stSidebar"] small,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+    color: #b8aed0 !important;
+}
 
 /* ── Primary button ──────────────────────────────────────────────── */
 .stButton > button[kind="primary"],
@@ -384,6 +395,54 @@ _FOCUS_OPTIONS = [
 with st.sidebar:
     st.markdown("## ⭐ Your Details")
 
+    # ── Chart at a Glance + Today's Sky (shown above form once a reading exists) ──
+    _glance_result = st.session_state.report_result
+    if _glance_result and _glance_result.get("chart_data"):
+        _gcd = _glance_result["chart_data"]
+        _g_sun = (_gcd.get("sun") or {})
+        _g_moon = (_gcd.get("moon") or {})
+        _g_asc = (_gcd.get("ascendant") or {})
+        if _g_sun.get("sign") or _g_moon.get("sign") or _g_asc.get("sign"):
+            st.markdown("**🌟 Chart at a Glance**")
+            _glance_cols = st.columns(3)
+            with _glance_cols[0]:
+                st.caption(f"☉ {_g_sun.get('sign', '—')}")
+            with _glance_cols[1]:
+                st.caption(f"☽ {_g_moon.get('sign', '—')}")
+            with _glance_cols[2]:
+                st.caption(f"↑ {_g_asc.get('sign', '—')}")
+
+        # Today's Sky
+        _today_date = date.today().isoformat()
+        if st.session_state._daily_sky_date != _today_date or st.session_state._daily_sky is None:
+            try:
+                _sky_computed = compute_daily_sky(
+                    natal_chart=_gcd,
+                    current_year=date.today().year,
+                    current_month=date.today().month,
+                    current_day=date.today().day,
+                )
+                st.session_state._daily_sky = _sky_computed
+                st.session_state._daily_sky_date = _today_date
+            except Exception:
+                st.session_state._daily_sky = {}
+
+        _sky = st.session_state._daily_sky or {}
+        if _sky:
+            st.markdown("**🔭 Today's Sky**")
+            _moon_sign = _sky.get("moon_sign") or "—"
+            _moon_deg = _sky.get("moon_degree", "")
+            _voc_badge = " *(VOC)*" if _sky.get("moon_voc") else ""
+            st.caption(f"🌙 Moon in {_moon_sign} {_moon_deg}°{_voc_badge}")
+            _ct = _sky.get("closest_transit")
+            if _ct:
+                st.caption(f"⚡ {_ct['summary']}")
+            _retro = _sky.get("retrograde_planets") or []
+            if _retro:
+                st.caption("Rx: " + ", ".join(f"{r['planet'].title()} in {r['sign']}" for r in _retro))
+
+        st.divider()
+
     with st.form("astro_form"):
         st.markdown("#### Birth Information")
         full_name = st.text_input("Full Name *", placeholder="e.g., Jane Doe", key="f_full_name")
@@ -483,63 +542,6 @@ with st.sidebar:
                         delete_chart(_c["id"])
                         st.rerun()
 
-    # ── Today's Sky widget ────────────────────────────────────────────────────
-    _sky_result = st.session_state.report_result
-    if _sky_result and _sky_result.get("chart_data"):
-        _today_date = date.today().isoformat()
-        if st.session_state._daily_sky_date != _today_date or st.session_state._daily_sky is None:
-            try:
-                _sky = compute_daily_sky(
-                    natal_chart=_sky_result["chart_data"],
-                    current_year=date.today().year,
-                    current_month=date.today().month,
-                    current_day=date.today().day,
-                )
-                st.session_state._daily_sky = _sky
-                st.session_state._daily_sky_date = _today_date
-            except Exception:
-                st.session_state._daily_sky = {}
-
-        _sky = st.session_state._daily_sky or {}
-        if _sky:
-            st.divider()
-            st.markdown("### 🔭 Today's Sky")
-
-            # Moon
-            _moon_sign = _sky.get("moon_sign") or "—"
-            _moon_deg = _sky.get("moon_degree", "")
-            _voc_badge = " · *void-of-course*" if _sky.get("moon_voc") else ""
-            st.markdown(f"🌙 **Moon in {_moon_sign}** {_moon_deg}°{_voc_badge}")
-
-            # Closest active transit
-            _ct = _sky.get("closest_transit")
-            if _ct:
-                st.markdown(f"⚡ {_ct['summary']}")
-
-            # Retrograde planets
-            _retro = _sky.get("retrograde_planets") or []
-            if _retro:
-                _retro_str = ", ".join(
-                    f"{r['planet'].title()} Rx in {r['sign']}" for r in _retro
-                )
-                st.caption(f"Retrograde: {_retro_str}")
-
-    # ── Chart at a Glance (Sun / Moon / ASC) ─────────────────────────────────
-    _glance_result = st.session_state.report_result
-    if _glance_result and _glance_result.get("chart_data"):
-        _gcd = _glance_result["chart_data"]
-        _g_sun = (_gcd.get("sun") or {})
-        _g_moon = (_gcd.get("moon") or {})
-        _g_asc = (_gcd.get("ascendant") or {})
-        if _g_sun.get("sign") or _g_moon.get("sign") or _g_asc.get("sign"):
-            st.divider()
-            st.markdown("### 🌟 Chart at a Glance")
-            if _g_sun.get("sign"):
-                st.caption(f"☉ Sun · {_g_sun['sign']} {_g_sun.get('position', '')}°")
-            if _g_moon.get("sign"):
-                st.caption(f"☽ Moon · {_g_moon['sign']} {_g_moon.get('position', '')}°")
-            if _g_asc.get("sign"):
-                st.caption(f"↑ ASC · {_g_asc['sign']} {_g_asc.get('position', '')}°")
 
 # --- Form submission: validate + compute chart, then stream report in the tab ---
 if submitted:
