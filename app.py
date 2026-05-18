@@ -306,6 +306,8 @@ hr { border-color: #2e2e4e; }
 # --- Session state initialisation ---
 if "f_birth_time_timezone" not in st.session_state:
     st.session_state["f_birth_time_timezone"] = "UTC"
+if "f_report_focus" not in st.session_state:
+    st.session_state["f_report_focus"] = []
 if "report_result" not in st.session_state:
     st.session_state.report_result = None
 if "chat_history" not in st.session_state:
@@ -521,16 +523,14 @@ with st.sidebar:
         )
 
         st.markdown("#### Report Focus")
-        _focus_selections = st.pills(
+        _focus_selections = st.multiselect(
             "Report Focus",
             options=_FOCUS_OPTIONS,
-            selection_mode="multi",
             key="f_report_focus",
             label_visibility="collapsed",
+            placeholder="Select focus areas (optional)...",
         )
         report_focus = ", ".join(_focus_selections) if _focus_selections else None
-        if report_focus:
-            st.caption(f"Selected: {report_focus}")
 
         submitted = st.form_submit_button(
             "Generate My Reading ⭐",
