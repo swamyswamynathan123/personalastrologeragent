@@ -88,6 +88,23 @@ html, body, [class*="css"] {
     color: #b8aed0 !important;
 }
 
+/* ── Help / tooltip icons ────────────────────────────────────────── */
+[data-testid="stTooltipIcon"] {
+    color: #9977cc !important;
+    opacity: 1 !important;
+}
+[data-testid="stTooltipIcon"] svg {
+    fill: #9977cc !important;
+    stroke: #9977cc !important;
+}
+[data-testid="stTooltipIcon"]:hover {
+    color: #c8a8f8 !important;
+}
+[data-testid="stTooltipIcon"]:hover svg {
+    fill: #c8a8f8 !important;
+    stroke: #c8a8f8 !important;
+}
+
 /* ── Primary button ──────────────────────────────────────────────── */
 .stButton > button[kind="primary"],
 .stFormSubmitButton > button[kind="primary"] {
