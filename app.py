@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from agent.graph import graph, prepare_graph
 from agent.state import AstrologerState
-from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report_stream, answer_synastry_followup_stream, generate_weekly_forecast_stream, generate_monthly_forecast_stream, generate_yearly_forecast_stream
+from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report_stream, answer_synastry_followup_stream, generate_weekly_forecast_stream, generate_monthly_forecast_stream, generate_yearly_forecast_stream, generate_overall_forecast_stream
 from astro.compute import compute_chart, compute_synastry, compute_transit_calendar, compute_daily_sky
 from cache.report_cache import purge_expired
 from storage.db import init_db, save_natal, save_synastry, list_charts, load_chart, delete_chart
@@ -356,6 +356,10 @@ if "_yearly_forecast" not in st.session_state:
     st.session_state._yearly_forecast = None
 if "_yearly_forecast_year" not in st.session_state:
     st.session_state._yearly_forecast_year = None
+if "_overall_forecast" not in st.session_state:
+    st.session_state._overall_forecast = None
+if "_overall_forecast_year" not in st.session_state:
+    st.session_state._overall_forecast_year = None
 
 # Drain a pending chart load into widget keys before any widget is instantiated
 if st.session_state._pending_load is not None:
@@ -648,7 +652,7 @@ if st.session_state._save_toast:
     st.success(st.session_state._save_toast)
     st.session_state._save_toast = None
 
-natal_tab, weekly_tab, monthly_tab, yearly_tab, calendar_tab, synastry_tab = st.tabs(["My Reading", "🌟 This Week", "🌙 This Month", "☀️ This Year", "Transit Calendar", "Compatibility / Synastry"])
+natal_tab, weekly_tab, monthly_tab, yearly_tab, overall_tab, calendar_tab, synastry_tab = st.tabs(["My Reading", "🌟 This Week", "🌙 This Month", "☀️ This Year", "🔮 Overall", "Transit Calendar", "Compatibility / Synastry"])
 
 with natal_tab:
     if st.session_state.validation_message == "__error__":
@@ -1088,6 +1092,42 @@ with yearly_tab:
                 _yearly_text = "".join(_yearly_chunks)
                 st.session_state._yearly_forecast = _yearly_text
                 st.session_state._yearly_forecast_year = _this_year
+                st.rerun()
+
+with overall_tab:
+    _result_for_overall = st.session_state.report_result
+    if not _result_for_overall:
+        st.info("Generate your natal reading first (My Reading tab), then come back here for your comprehensive life-arc forecast.")
+    else:
+        _this_year_o = str(date.today().year)
+        _has_fresh_overall = (
+            st.session_state._overall_forecast is not None
+            and st.session_state._overall_forecast_year == _this_year_o
+        )
+
+        st.markdown(
+            f"### Overall Forecast for {_result_for_overall.get('full_name', 'You')}",
+            unsafe_allow_html=False,
+        )
+        st.caption("A comprehensive synthesis across all time frames — now through the next 2–5 years · Refreshes each calendar year")
+
+        if _has_fresh_overall:
+            import markdown as _omd
+            _overall_html = _omd.markdown(st.session_state._overall_forecast, extensions=["extra"])
+            st.markdown(f'<div class="report-card">{_overall_html}</div>', unsafe_allow_html=True)
+            if st.button("🔄 Refresh Forecast", key="overall_refresh"):
+                st.session_state._overall_forecast = None
+                st.session_state._overall_forecast_year = None
+                st.rerun()
+        else:
+            if st.button("✨ Generate Overall Forecast", key="overall_generate", type="primary"):
+                _overall_state = {**_result_for_overall}
+                _overall_state["parsed_current_datetime"] = datetime.now(pytz.UTC).isoformat()
+                with st.spinner("Synthesising your complete cosmic picture... ✨"):
+                    _overall_chunks = list(generate_overall_forecast_stream(_overall_state))
+                _overall_text = "".join(_overall_chunks)
+                st.session_state._overall_forecast = _overall_text
+                st.session_state._overall_forecast_year = _this_year_o
                 st.rerun()
 
 with calendar_tab:

@@ -2357,6 +2357,136 @@ def generate_yearly_forecast_stream(state: "AstrologerState"):
                 yield content
 
 
+def _build_overall_prompt(state: "AstrologerState") -> str:
+    """Build a comprehensive life-arc prompt synthesising all time frames."""
+    chart = state.get("chart_data") or {}
+    name = state.get("full_name") or "you"
+    today = (state.get("parsed_current_datetime") or "")[:10]
+    current_year = today[:4] if today else "this year"
+
+    sun_line = _format_planet("Sun", chart.get("sun"))
+    moon_line = _format_planet("Moon", chart.get("moon"))
+    asc_line = (
+        f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°"
+        if chart.get("ascendant") else "- Ascendant: unavailable"
+    )
+    mc_line = (
+        f"- Midheaven: {chart['midheaven']['sign']} {chart['midheaven']['position']}°"
+        if chart.get("midheaven") else "- Midheaven: unavailable"
+    )
+
+    transits_text = _format_transits(chart.get("transits") or [])
+    upcoming_text = _format_upcoming_transits(chart.get("upcoming_transits") or [])
+    transit_passes_text = _format_transit_passes(chart.get("transit_passes") or [])
+    solar_arc_text = _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
+    primary_dir_text = _format_primary_directions(chart.get("primary_directions") or [])
+    solar_return_text = _format_solar_return(chart.get("solar_return") or {})
+    prog_text = _format_progressions(chart.get("progressions"))
+    eclipse_text = _format_eclipse_sensitivity(chart.get("eclipse_sensitivity") or [])
+    firdaria_text = _format_firdaria(chart.get("firdaria"), chart)
+    vedic_text = _format_vedic(chart.get("vedic"))
+    prof = chart.get("profection") or {}
+    prof_text = _format_profection(prof)
+    monthly_line = _format_monthly_profection(prof)
+    if monthly_line:
+        prof_text += "\n" + monthly_line
+    convergences = _compute_convergences(chart, state)
+    convergence_block = ""
+    if convergences:
+        convergence_block = (
+            "\n⚡ CONVERGENCE SIGNALS:\n"
+            + "\n".join(f"▶ {c}" for c in convergences)
+            + "\n"
+        )
+
+    return f"""You are a master astrologer writing a comprehensive **Overall Life Forecast** for {name}.
+Date: {today}
+{convergence_block}
+## Natal Anchors
+{sun_line}
+{moon_line}
+{asc_line}
+{mc_line}
+
+## Active Transits (now)
+{transits_text}
+
+## Upcoming Transits (30 days)
+{upcoming_text}
+
+## 12-Month Transit Passes
+{transit_passes_text}
+
+## Solar Arc Aspects
+{solar_arc_text}
+
+## Primary Directions
+{primary_dir_text}
+
+## Solar Return ({current_year})
+{solar_return_text}
+
+## Secondary Progressions
+{prog_text}
+
+## Eclipse Sensitivity
+{eclipse_text}
+
+## Annual + Monthly Profection
+{prof_text}
+
+## Firdaria Time Lords
+{firdaria_text}
+
+## Vedic (Jyotish) Overlay
+{vedic_text}
+
+## Instructions
+Write exactly **6 paragraphs** of flowing prose. No headers or bullet points.
+
+**Paragraph 1 — Where You Stand Right Now:** Open with the single most defining astrological fact about {name}'s life at this moment — the one transit, solar arc, or time lord that overshadows everything else. Name the planet, what it is touching, and the house-and-life-area it rules. This is the load-bearing beam of the entire forecast.
+
+**Paragraph 2 — The Immediate Window (next 4 weeks):** What demands attention right now? Draw from the tightest active transits and upcoming events. Name specific dates or windows where possible. What action, decision, or awareness is most time-sensitive?
+
+**Paragraph 3 — The Season (next 3 months):** Zoom out to the 90-day arc. What story is building or resolving? Identify 1–2 transit passes or solar arc perfections that define this season and the area of life they are reshaping.
+
+**Paragraph 4 — The Year Ahead:** What is {current_year} fundamentally about for {name}? Synthesise the Solar Return, Firdaria, Mahadasha, and annual profection into one coherent life chapter. Name any eclipse activations that amplify the year's themes. If the Firdaria lord and Mahadasha lord are the same planet, name this convergence explicitly.
+
+**Paragraph 5 — The Deeper Arc (2–5 years):** What is the longer story written in the outer-planet transits and primary directions? Identify the 1–2 slowest-moving influences (Pluto, Neptune, Uranus, or a primary direction) and describe the multi-year transformation they are asking of {name}. What quality of being is being forged over this span?
+
+**Paragraph 6 — The Core Invitation:** Synthesise everything above into one grounding statement. What is the single most important thing {name} can do, be, or focus on to work *with* the current cosmic weather rather than against it? Close with a specific, encouraging statement rooted in {name}'s natal strengths.
+
+Tone: integrative, warm, direct. Every paragraph must name at least one specific planet, sign, house, or date. Do not repeat the same transit across paragraphs — each paragraph should introduce new chart factors.
+"""
+
+
+def generate_overall_forecast_stream(state: "AstrologerState"):
+    """Single-pass GPT-4o overall life-arc forecast — yields text chunks for st.write_stream()."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    prompt = _build_overall_prompt(state)
+    system = (
+        "You are a master astrologer fluent in Western and Vedic traditions, writing comprehensive life-arc forecasts. "
+        "You synthesize all predictive layers — transits, solar arcs, primary directions, progressions, solar return, "
+        "Firdaria, Mahadasha, profection, and eclipse sensitivity — into a single coherent narrative. "
+        "Every statement is grounded in the specific chart data provided. "
+        "Tone: integrative, visionary, warm, and direct — speak to the person, not about them."
+    )
+    with client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=1600,
+        temperature=0.65,
+        stream=True,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    ) as stream:
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield content
+
+
 def answer_synastry_followup_stream(
     name_a: str, dob_a: str, chart_a: dict,
     name_b: str, dob_b: str, chart_b: dict,
