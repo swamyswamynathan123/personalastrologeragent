@@ -151,7 +151,10 @@ html, body, [class*="css"] {
     line-height: 1.85;
     color: #e8e0d0;
 }
-.report-card h2 {
+.report-card h1,
+.report-card h2,
+.report-card h3,
+.report-card h4 {
     color: #c8a8f8;
     font-size: 1.15rem;
     letter-spacing: 0.05em;
@@ -160,7 +163,11 @@ html, body, [class*="css"] {
     padding-bottom: 0.5rem;
     margin-top: 1.6rem;
 }
-.report-card h2:first-child { margin-top: 0; }
+.report-card h1:first-child,
+.report-card h2:first-child,
+.report-card h3:first-child,
+.report-card h4:first-child { margin-top: 0; }
+.report-card hr { display: none; }
 .report-card strong { color: #d4bfff; }
 .report-card li { margin-bottom: 0.3rem; }
 
