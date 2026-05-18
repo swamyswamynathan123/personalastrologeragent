@@ -107,21 +107,18 @@ html, body, [class*="css"] {
 
 /* ── Tooltip popup content ───────────────────────────────────────── */
 [data-testid="stTooltipContent"],
+[data-testid="stTooltipContent"] *,
 div[role="tooltip"],
-div[role="tooltip"] div,
-div[role="tooltip"] p,
-div[role="tooltip"] span {
+div[role="tooltip"] *,
+div[data-baseweb="tooltip"],
+div[data-baseweb="tooltip"] *,
+div[data-baseweb="popover"],
+div[data-baseweb="popover"] * {
     background-color: #2a2a4a !important;
     color: #e8e0d0 !important;
-    border: 1px solid #4a4a70 !important;
-    border-radius: 6px !important;
+    border-color: #4a4a70 !important;
     font-size: 0.85rem !important;
-    line-height: 1.5 !important;
-    padding: 0.5rem 0.75rem !important;
-}
-[data-testid="stTooltipContent"] p,
-[data-testid="stTooltipContent"] span {
-    color: #e8e0d0 !important;
+    line-height: 1.6 !important;
 }
 
 /* ── Primary button ──────────────────────────────────────────────── */
