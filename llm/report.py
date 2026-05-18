@@ -2067,6 +2067,296 @@ def _build_synastry_event_messages(
     ]
 
 
+def _build_weekly_prompt(state: "AstrologerState") -> str:
+    """Build a compact prompt for a 7-day personalised forecast."""
+    chart = state.get("chart_data") or {}
+    name = state.get("full_name") or "you"
+    today = (state.get("parsed_current_datetime") or "")[:10]
+
+    transits_text = _format_transits(chart.get("transits") or [])
+    upcoming_text = _format_upcoming_transits(chart.get("upcoming_transits") or [])
+    prof = chart.get("profection") or {}
+    prof_text = _format_profection(prof)
+    monthly_line = _format_monthly_profection(prof)
+    if monthly_line:
+        prof_text += "\n" + monthly_line
+    firdaria_text = _format_firdaria(chart.get("firdaria"), chart)
+    prog_text = _format_progressions(chart.get("progressions"))
+
+    sun_line = _format_planet("Sun", chart.get("sun"))
+    moon_line = _format_planet("Moon", chart.get("moon"))
+    asc_line = (
+        f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°"
+        if chart.get("ascendant") else "- Ascendant: unavailable"
+    )
+
+    return f"""You are a warm, precise astrologer writing a **This Week** personal forecast for {name}.
+Date: {today}
+
+## Natal Anchors
+{sun_line}
+{moon_line}
+{asc_line}
+
+## Active Transits
+{transits_text}
+
+## Upcoming Transits (next 14 days)
+{upcoming_text}
+
+## Annual + Monthly Profection
+{prof_text}
+
+## Firdaria Time Lords
+{firdaria_text}
+
+## Secondary Progressions
+{prog_text}
+
+## Instructions
+Write exactly **3 short paragraphs**. Do not use section headers or bullet points — flowing prose only.
+
+**Paragraph 1 — Dominant Energy:** What is the single most powerful planetary influence active this week for {name}? Name the specific transit or time lord, what it is touching in the natal chart, and the emotional or practical tone it creates. One clear, grounded paragraph.
+
+**Paragraph 2 — What Needs Attention:** Name one area of life that may feel tense, blocked, or charged this week based on the data. Be honest and concrete — cite the relevant transit or progressed aspect. Then offer one practical reframe or approach that works *with* the energy rather than against it.
+
+**Paragraph 3 — Best Window:** Identify the single best 2–4 day window this week for important action, decisions, or conversations. Explain specifically why (cite the supportive transit or timing factor). Close with one sentence of encouragement tailored to {name}'s natal signature.
+
+Tone: warm, direct, personal — as if written just for {name}, not a generic horoscope. Every sentence must name at least one specific planet, sign, or house.
+"""
+
+
+def generate_weekly_forecast_stream(state: "AstrologerState"):
+    """Single-pass GPT-4o weekly forecast — yields text chunks for st.write_stream()."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    prompt = _build_weekly_prompt(state)
+    system = (
+        "You are a master astrologer writing personalised weekly forecasts. "
+        "You ground every statement in specific planets, degrees, and houses from the chart data. "
+        "You never make vague generalizations. Tone: warm, direct, and personal."
+    )
+    with client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=600,
+        temperature=0.65,
+        stream=True,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    ) as stream:
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield content
+
+
+def _build_monthly_prompt(state: "AstrologerState") -> str:
+    """Build a prompt for a 30-day personalised forecast."""
+    chart = state.get("chart_data") or {}
+    name = state.get("full_name") or "you"
+    today = (state.get("parsed_current_datetime") or "")[:10]
+
+    transits_text = _format_transits(chart.get("transits") or [])
+    upcoming_text = _format_upcoming_transits(chart.get("upcoming_transits") or [])
+    lunar_return_text = _format_lunar_return(chart.get("lunar_return") or {})
+    solar_arc_text = _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
+    prof = chart.get("profection") or {}
+    prof_text = _format_profection(prof)
+    monthly_line = _format_monthly_profection(prof)
+    if monthly_line:
+        prof_text += "\n" + monthly_line
+    firdaria_text = _format_firdaria(chart.get("firdaria"), chart)
+    prog_text = _format_progressions(chart.get("progressions"))
+    eclipse_text = _format_eclipse_sensitivity(chart.get("eclipse_sensitivity") or [])
+
+    sun_line = _format_planet("Sun", chart.get("sun"))
+    moon_line = _format_planet("Moon", chart.get("moon"))
+    asc_line = (
+        f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°"
+        if chart.get("ascendant") else "- Ascendant: unavailable"
+    )
+
+    return f"""You are a warm, precise astrologer writing a **This Month** personal forecast for {name}.
+Date: {today}
+
+## Natal Anchors
+{sun_line}
+{moon_line}
+{asc_line}
+
+## Active Transits
+{transits_text}
+
+## Upcoming Transits (next 30 days)
+{upcoming_text}
+
+## Lunar Return
+{lunar_return_text}
+
+## Solar Arc Aspects
+{solar_arc_text}
+
+## Annual + Monthly Profection
+{prof_text}
+
+## Firdaria Time Lords
+{firdaria_text}
+
+## Secondary Progressions
+{prog_text}
+
+## Eclipse Sensitivity
+{eclipse_text}
+
+## Instructions
+Write exactly **4 paragraphs** of flowing prose. No headers, no bullet points.
+
+**Paragraph 1 — Monthly Theme:** What is the dominant astrological story for {name} this month? Identify the 1–2 most significant transits or time-lord activations and name the area of life they are illuminating. What psychological or practical chapter is opening or closing?
+
+**Paragraph 2 — Peak Moments:** Identify the 2 most significant windows within the month — one that is highly supportive and one that may require extra care or awareness. Name the specific planetary event for each and what it is best used for (or how to navigate it).
+
+**Paragraph 3 — Inner Work & Growth:** What is the deeper invitation this month at the soul level? Draw from the Lunar Return, profection year, or any progressed aspect within 0.5° that shows an interior shift underway. What quality is {name} being asked to develop or integrate?
+
+**Paragraph 4 — How to Close the Month Well:** What specific action, decision, or focus in the final week of the month will help {name} close this lunar cycle with the most clarity and momentum? Tie this to the chart data.
+
+Tone: warm, grounding, specific. Every paragraph must cite at least one planet, sign, house, or date. Do not repeat content from one paragraph to the next.
+"""
+
+
+def generate_monthly_forecast_stream(state: "AstrologerState"):
+    """Single-pass GPT-4o monthly forecast — yields text chunks for st.write_stream()."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    prompt = _build_monthly_prompt(state)
+    system = (
+        "You are a master astrologer writing personalised monthly forecasts. "
+        "You synthesize transits, lunar returns, profection, and progressions into coherent themes. "
+        "Every statement is grounded in specific chart data. Tone: warm, direct, personal."
+    )
+    with client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=900,
+        temperature=0.65,
+        stream=True,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    ) as stream:
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield content
+
+
+def _build_yearly_prompt(state: "AstrologerState") -> str:
+    """Build a prompt for a full-year personalised forecast."""
+    chart = state.get("chart_data") or {}
+    name = state.get("full_name") or "you"
+    today = (state.get("parsed_current_datetime") or "")[:10]
+    current_year = today[:4] if today else "this year"
+
+    transit_passes_text = _format_transit_passes(chart.get("transit_passes") or [])
+    solar_return_text = _format_solar_return(chart.get("solar_return") or {})
+    solar_arc_text = _format_solar_arc_aspects(chart.get("solar_arc_aspects") or [])
+    primary_dir_text = _format_primary_directions(chart.get("primary_directions") or [])
+    eclipse_text = _format_eclipse_sensitivity(chart.get("eclipse_sensitivity") or [])
+    firdaria_text = _format_firdaria(chart.get("firdaria"), chart)
+    vedic_text = _format_vedic(chart.get("vedic"))
+    prog_text = _format_progressions(chart.get("progressions"))
+    prof = chart.get("profection") or {}
+    prof_text = _format_profection(prof)
+
+    sun_line = _format_planet("Sun", chart.get("sun"))
+    moon_line = _format_planet("Moon", chart.get("moon"))
+    asc_line = (
+        f"- Ascendant: {chart['ascendant']['sign']} {chart['ascendant']['position']}°"
+        if chart.get("ascendant") else "- Ascendant: unavailable"
+    )
+    mc_line = (
+        f"- Midheaven: {chart['midheaven']['sign']} {chart['midheaven']['position']}°"
+        if chart.get("midheaven") else "- Midheaven: unavailable"
+    )
+
+    return f"""You are a warm, precise astrologer writing a **{current_year} Annual Forecast** for {name}.
+Date: {today}
+
+## Natal Anchors
+{sun_line}
+{moon_line}
+{asc_line}
+{mc_line}
+
+## 12-Month Transit Passes (exact dates)
+{transit_passes_text}
+
+## Solar Return ({current_year})
+{solar_return_text}
+
+## Solar Arc Aspects
+{solar_arc_text}
+
+## Primary Directions
+{primary_dir_text}
+
+## Eclipse Sensitivity
+{eclipse_text}
+
+## Firdaria Time Lords
+{firdaria_text}
+
+## Vedic (Jyotish) Overlay
+{vedic_text}
+
+## Secondary Progressions
+{prog_text}
+
+## Annual Profection
+{prof_text}
+
+## Instructions
+Write exactly **5 paragraphs** of flowing prose. No headers or bullet points.
+
+**Paragraph 1 — The Year's Central Theme:** What is the single most defining astrological arc for {name} in {current_year}? Identify the most significant outer-planet transit pass or solar arc perfection and name the house, natal planet, and life area being activated. State clearly what this year is *about* at the highest level.
+
+**Paragraph 2 — First Half of the Year:** What are the most important transit events and windows from now through mid-{current_year}? Name specific dates or month-windows and what they are best used for. Include any eclipse activations that fall in this period.
+
+**Paragraph 3 — Second Half of the Year:** What shifts after mid-{current_year}? Identify the key transit events, any retrograde shadow periods worth noting, and whether the year builds toward a culmination or prepares the ground for something new.
+
+**Paragraph 4 — Deeper Currents:** Read the Solar Return chart, Firdaria/Mahadasha lords, and progressed aspects together. What is the inner developmental arc this year — what quality of being is {name} being called to grow into, let go of, or integrate? Where are the two traditions (Western and Vedic) pointing in the same direction?
+
+**Paragraph 5 — Strategic Guidance:** Give {name} 3 specific, concrete actions or intentions that are cosmically supported this year — each tied to a named transit, solar arc, or timing factor. Close with a grounding statement about the year's overall gift, even if it comes through challenge.
+
+Tone: visionary yet grounded, warm, direct. Every paragraph must cite at least one specific planet, sign, house, or date. Do not repeat key points from paragraph to paragraph.
+"""
+
+
+def generate_yearly_forecast_stream(state: "AstrologerState"):
+    """Single-pass GPT-4o yearly forecast — yields text chunks for st.write_stream()."""
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    prompt = _build_yearly_prompt(state)
+    system = (
+        "You are a master astrologer fluent in Western and Vedic traditions, writing personalised annual forecasts. "
+        "You synthesize outer-planet transits, solar returns, solar arcs, primary directions, Firdaria, and Mahadasha "
+        "into a coherent yearly narrative. Every statement is grounded in the specific chart data provided. "
+        "Tone: visionary, warm, direct — speak to the person, not about them."
+    )
+    with client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=1400,
+        temperature=0.65,
+        stream=True,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    ) as stream:
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield content
+
+
 def answer_synastry_followup_stream(
     name_a: str, dob_a: str, chart_a: dict,
     name_b: str, dob_b: str, chart_b: dict,

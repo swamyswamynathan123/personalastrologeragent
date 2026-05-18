@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from agent.graph import graph, prepare_graph
 from agent.state import AstrologerState
-from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report_stream, answer_synastry_followup_stream
+from llm.report import answer_followup_stream, generate_report_stream, generate_synastry_report_stream, answer_synastry_followup_stream, generate_weekly_forecast_stream, generate_monthly_forecast_stream, generate_yearly_forecast_stream
 from astro.compute import compute_chart, compute_synastry, compute_transit_calendar
 from cache.report_cache import purge_expired
 from storage.db import init_db, save_natal, save_synastry, list_charts, load_chart, delete_chart
@@ -303,6 +303,18 @@ if "_save_toast" not in st.session_state:
     st.session_state._save_toast = None
 if "_pending_load" not in st.session_state:
     st.session_state._pending_load = None
+if "_weekly_forecast" not in st.session_state:
+    st.session_state._weekly_forecast = None
+if "_weekly_forecast_date" not in st.session_state:
+    st.session_state._weekly_forecast_date = None
+if "_monthly_forecast" not in st.session_state:
+    st.session_state._monthly_forecast = None
+if "_monthly_forecast_month" not in st.session_state:
+    st.session_state._monthly_forecast_month = None
+if "_yearly_forecast" not in st.session_state:
+    st.session_state._yearly_forecast = None
+if "_yearly_forecast_year" not in st.session_state:
+    st.session_state._yearly_forecast_year = None
 
 # Drain a pending chart load into widget keys before any widget is instantiated
 if st.session_state._pending_load is not None:
@@ -547,7 +559,115 @@ if st.session_state._save_toast:
     st.success(st.session_state._save_toast)
     st.session_state._save_toast = None
 
-natal_tab, calendar_tab, synastry_tab = st.tabs(["My Reading", "Transit Calendar", "Compatibility / Synastry"])
+weekly_tab, monthly_tab, yearly_tab, natal_tab, calendar_tab, synastry_tab = st.tabs(["🌟 This Week", "🌙 This Month", "☀️ This Year", "My Reading", "Transit Calendar", "Compatibility / Synastry"])
+
+with weekly_tab:
+    _result_for_weekly = st.session_state.report_result
+    if not _result_for_weekly:
+        st.info("Generate your natal reading first (My Reading tab), then come back here for your personalised weekly forecast.")
+    else:
+        _today_str = date.today().isoformat()
+        _has_fresh_forecast = (
+            st.session_state._weekly_forecast is not None
+            and st.session_state._weekly_forecast_date == _today_str
+        )
+
+        st.markdown(
+            f"### This Week's Forecast for {_result_for_weekly.get('full_name', 'You')}",
+            unsafe_allow_html=False,
+        )
+        st.caption(f"Week of {_today_str} · Personalised from your natal chart")
+
+        if _has_fresh_forecast:
+            import markdown as _wmd
+            _weekly_html = _wmd.markdown(st.session_state._weekly_forecast, extensions=["extra"])
+            st.markdown(f'<div class="report-card">{_weekly_html}</div>', unsafe_allow_html=True)
+            if st.button("🔄 Refresh Forecast", key="weekly_refresh"):
+                st.session_state._weekly_forecast = None
+                st.session_state._weekly_forecast_date = None
+                st.rerun()
+        else:
+            if st.button("✨ Generate This Week's Forecast", key="weekly_generate", type="primary"):
+                _weekly_state = {**_result_for_weekly}
+                _weekly_state["parsed_current_datetime"] = datetime.now(pytz.UTC).isoformat()
+                with st.spinner("Reading the week ahead... ✨"):
+                    _weekly_chunks = list(generate_weekly_forecast_stream(_weekly_state))
+                _weekly_text = "".join(_weekly_chunks)
+                st.session_state._weekly_forecast = _weekly_text
+                st.session_state._weekly_forecast_date = _today_str
+                st.rerun()
+
+with monthly_tab:
+    _result_for_monthly = st.session_state.report_result
+    if not _result_for_monthly:
+        st.info("Generate your natal reading first (My Reading tab), then come back here for your personalised monthly forecast.")
+    else:
+        _this_month = date.today().strftime("%Y-%m")
+        _has_fresh_monthly = (
+            st.session_state._monthly_forecast is not None
+            and st.session_state._monthly_forecast_month == _this_month
+        )
+
+        st.markdown(
+            f"### {date.today().strftime('%B %Y')} Forecast for {_result_for_monthly.get('full_name', 'You')}",
+            unsafe_allow_html=False,
+        )
+        st.caption(f"Personalised from your natal chart · Refreshes each calendar month")
+
+        if _has_fresh_monthly:
+            import markdown as _mmd
+            _monthly_html = _mmd.markdown(st.session_state._monthly_forecast, extensions=["extra"])
+            st.markdown(f'<div class="report-card">{_monthly_html}</div>', unsafe_allow_html=True)
+            if st.button("🔄 Refresh Forecast", key="monthly_refresh"):
+                st.session_state._monthly_forecast = None
+                st.session_state._monthly_forecast_month = None
+                st.rerun()
+        else:
+            if st.button("✨ Generate Monthly Forecast", key="monthly_generate", type="primary"):
+                _monthly_state = {**_result_for_monthly}
+                _monthly_state["parsed_current_datetime"] = datetime.now(pytz.UTC).isoformat()
+                with st.spinner("Mapping the month ahead... ✨"):
+                    _monthly_chunks = list(generate_monthly_forecast_stream(_monthly_state))
+                _monthly_text = "".join(_monthly_chunks)
+                st.session_state._monthly_forecast = _monthly_text
+                st.session_state._monthly_forecast_month = _this_month
+                st.rerun()
+
+with yearly_tab:
+    _result_for_yearly = st.session_state.report_result
+    if not _result_for_yearly:
+        st.info("Generate your natal reading first (My Reading tab), then come back here for your personalised annual forecast.")
+    else:
+        _this_year = str(date.today().year)
+        _has_fresh_yearly = (
+            st.session_state._yearly_forecast is not None
+            and st.session_state._yearly_forecast_year == _this_year
+        )
+
+        st.markdown(
+            f"### {_this_year} Annual Forecast for {_result_for_yearly.get('full_name', 'You')}",
+            unsafe_allow_html=False,
+        )
+        st.caption(f"Personalised from your natal chart · Refreshes each calendar year")
+
+        if _has_fresh_yearly:
+            import markdown as _ymd
+            _yearly_html = _ymd.markdown(st.session_state._yearly_forecast, extensions=["extra"])
+            st.markdown(f'<div class="report-card">{_yearly_html}</div>', unsafe_allow_html=True)
+            if st.button("🔄 Refresh Forecast", key="yearly_refresh"):
+                st.session_state._yearly_forecast = None
+                st.session_state._yearly_forecast_year = None
+                st.rerun()
+        else:
+            if st.button("✨ Generate Annual Forecast", key="yearly_generate", type="primary"):
+                _yearly_state = {**_result_for_yearly}
+                _yearly_state["parsed_current_datetime"] = datetime.now(pytz.UTC).isoformat()
+                with st.spinner("Charting your year ahead... ✨"):
+                    _yearly_chunks = list(generate_yearly_forecast_stream(_yearly_state))
+                _yearly_text = "".join(_yearly_chunks)
+                st.session_state._yearly_forecast = _yearly_text
+                st.session_state._yearly_forecast_year = _this_year
+                st.rerun()
 
 with natal_tab:
     if st.session_state.validation_message == "__error__":
