@@ -497,61 +497,115 @@ with st.sidebar:
         st.divider()
 
     with st.form("astro_form"):
+        st.caption("Fields marked * are required. Hover the ⓘ icon on any field for guidance.")
+
         st.markdown("#### Birth Information")
-        full_name = st.text_input("Full Name *", placeholder="e.g., Jane Doe", key="f_full_name")
+        full_name = st.text_input(
+            "Full Name *",
+            placeholder="e.g., Jane Doe",
+            key="f_full_name",
+            help="Used to personalise your reading. Can be your full name or a preferred name.",
+        )
         dob = st.date_input(
             "Date of Birth *",
             value=None,
             min_value=date(1900, 1, 1),
             max_value=date.today(),
             key="f_dob",
+            help="Your exact birth date determines your Sun sign and all planetary positions in the natal chart.",
         )
-        birth_time = st.time_input("Birth Time *", value=None, step=60, key="f_birth_time")
+        birth_time = st.time_input(
+            "Birth Time *",
+            value=None,
+            step=60,
+            key="f_birth_time",
+            help=(
+                "The single most important field after date of birth. "
+                "Even 15 minutes can shift your Ascendant sign and all 12 house cusps, "
+                "changing a significant portion of the reading. "
+                "Check your birth certificate or hospital records for the most accurate time."
+            ),
+        )
         birth_time_confidence = st.selectbox(
             "Birth Time Confidence",
             options=["exact", "approximate", "unknown"],
             index=0,
             key="f_birth_time_confidence",
-            help="How certain are you of the birth time? Approximate/unknown softens house-based interpretations.",
+            help=(
+                "How certain are you of the birth time? "
+                "Exact = from official records. "
+                "Approximate = you were told a rough time (±30 min). "
+                "Unknown = no time available. "
+                "Approximate/unknown softens Ascendant and house interpretations and adds a birth-time rectification section to your report."
+            ),
         )
         birth_location = st.text_input(
             "Birth Location *",
-            placeholder="City, Region, Country",
+            placeholder="e.g., Mumbai, Maharashtra, India",
             key="f_birth_location",
+            help=(
+                "The city where you were born. Used to calculate your Ascendant, "
+                "Midheaven, and all 12 house cusps. "
+                "Format: City, Region, Country. "
+                "Be as specific as possible — a large country alone (e.g., 'India') is not sufficient."
+            ),
         )
         birth_time_timezone = st.selectbox(
             "Birth Timezone *",
             options=ALL_TIMEZONES,
             key="f_birth_time_timezone",
+            help=(
+                "The timezone of your birth location — not your current timezone. "
+                "For example, someone born in Mumbai uses Asia/Kolkata even if they now live in New York. "
+                "Search by city name or region (e.g., 'Kolkata', 'London', 'New_York')."
+            ),
         )
         house_system = st.selectbox(
             "House System",
             options=["Placidus", "Whole Sign", "Koch"],
             index=0,
             key="f_house_system",
-            help="Placidus is standard Western. Whole Sign is used in Hellenistic & Vedic traditions. Koch is popular in German-speaking countries.",
+            help=(
+                "Determines how the sky is divided into 12 life areas (houses). "
+                "Placidus is the standard in modern Western astrology. "
+                "Whole Sign is the oldest system, used in Hellenistic and Vedic traditions — each sign = one house. "
+                "Koch is popular in German-speaking countries and emphasises the MC axis. "
+                "If you're unsure, leave as Placidus."
+            ),
         )
         current_location = st.text_input(
             "Current Location *",
-            placeholder="City, Region, Country",
+            placeholder="e.g., New York, NY, USA",
             key="f_current_location",
+            help=(
+                "Where you live right now. Used to calculate current planetary transits, "
+                "your Solar Return chart (annual forecast), and Lunar Return chart (monthly forecast). "
+                "Format: City, Region, Country."
+            ),
         )
 
         st.markdown("#### Optional")
         additional_info = st.text_area(
             "Additional Context",
-            placeholder="Life events or questions to address…",
+            placeholder="e.g., I'm considering a career change and recently ended a long relationship…",
             height=100,
             key="f_additional_info",
+            help=(
+                "Share anything you'd like the reading to address — recent life events, "
+                "decisions you're facing, relationships, career questions, or health concerns. "
+                "The more specific you are, the more relevant the guidance will be."
+            ),
         )
 
         st.markdown("#### Report Focus")
+        st.caption("Adds a dedicated deep-dive section on your chosen life areas. The rest of the reading remains comprehensive.")
         _focus_selections = st.multiselect(
             "Report Focus",
             options=_FOCUS_OPTIONS,
             key="f_report_focus",
             label_visibility="collapsed",
             placeholder="Select focus areas (optional)...",
+            help="Select one or more life areas for a focused analysis section at the end of your report.",
         )
         report_focus = ", ".join(_focus_selections) if _focus_selections else None
 
