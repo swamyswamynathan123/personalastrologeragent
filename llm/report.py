@@ -3605,3 +3605,81 @@ def _ground_synastry_report(
         ],
     )
     return response.choices[0].message.content or report
+
+
+# ---------------------------------------------------------------------------
+# Daily Digest
+# ---------------------------------------------------------------------------
+
+def generate_daily_digest(
+    full_name: str,
+    sun_sign: str,
+    moon_sign: str,
+    asc_sign: str,
+    today_date: str,
+    sky: dict,
+    active_transits: list[dict],
+    dasha: dict,
+) -> str:
+    """Return a 2-3 sentence personalised daily digest for the sidebar.
+
+    Keeps the call cheap: max 160 tokens, temperature 0.82.
+    """
+    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+    sky_moon = f"Moon in {sky.get('moon_sign', '?')} {sky.get('moon_degree', '')}°"
+    if sky.get("moon_voc"):
+        sky_moon += " (Void-of-Course — better to reflect than initiate)"
+
+    retro_planets = sky.get("retrograde_planets") or []
+    retro_str = (
+        "Retrograde: " + ", ".join(r["planet"].title() for r in retro_planets)
+        if retro_planets else "No planets retrograde today."
+    )
+
+    ct = sky.get("closest_transit")
+    transit_str = ct["summary"] if ct else "No major outer-planet transit within orb today."
+
+    top_transits = active_transits[:3]
+    inner_str = (
+        "; ".join(
+            f"Transiting {t['transiting_planet'].title()} {t['aspect']} natal {t['natal_planet'].title()}"
+            for t in top_transits
+        ) if top_transits else "No close inner-planet transits today."
+    )
+
+    cm = dasha.get("current_mahadasha") or {}
+    ca = dasha.get("current_antardasha") or {}
+    dasha_str = ""
+    if cm:
+        dasha_str = f"{cm['lord']} Mahadasha"
+        if ca:
+            dasha_str += f" / {ca['lord']} Antardasha"
+
+    prompt = f"""Today is {today_date}. Write a personalised 2–3 sentence daily cosmic digest for {full_name} (Sun: {sun_sign}, Moon: {moon_sign}, ASC: {asc_sign}).
+
+Sky today:
+- {sky_moon}
+- {retro_str}
+- Closest outer-planet transit: {transit_str}
+- Inner-planet activity: {inner_str}
+{f'- Vedic timing: {dasha_str}' if dasha_str else ''}
+
+Rules: Be warm and specific. Name one actionable nudge. Do not repeat the raw data — synthesise it into meaning for this person. Max 3 sentences."""
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=160,
+        temperature=0.82,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a warm, insightful astrologer writing a brief daily digest. "
+                    "Synthesise the sky into personal meaning. Be specific and encouraging."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+    )
+    return (response.choices[0].message.content or "").strip()

@@ -550,6 +550,10 @@ if "_daily_sky" not in st.session_state:
     st.session_state._daily_sky = None
 if "_daily_sky_date" not in st.session_state:
     st.session_state._daily_sky_date = None
+if "_daily_digest" not in st.session_state:
+    st.session_state._daily_digest = None
+if "_daily_digest_key" not in st.session_state:
+    st.session_state._daily_digest_key = None
 if "_weekly_forecast" not in st.session_state:
     st.session_state._weekly_forecast = None
 if "_weekly_forecast_date" not in st.session_state:
@@ -873,6 +877,42 @@ with st.sidebar:
             _retro = _sky.get("retrograde_planets") or []
             if _retro:
                 st.caption("Rx: " + ", ".join(f"{r['planet'].title()} in {r['sign']}" for r in _retro))
+
+            # AI daily digest — cached by date + person, regenerated once per day
+            _digest_key = f"{_glance_result.get('full_name')}|{_glance_result.get('parsed_dob')}|{_today_date}"
+            _digest_col, _digest_btn_col = st.columns([5, 1])
+            with _digest_btn_col:
+                _refresh_digest = st.button("↺", key="refresh_digest", help="Refresh digest")
+            if _refresh_digest:
+                st.session_state._daily_digest_key = None
+
+            if st.session_state._daily_digest_key != _digest_key or st.session_state._daily_digest is None:
+                try:
+                    from llm.report import generate_daily_digest as _gen_digest
+                    _gcd2 = _glance_result.get("chart_data") or {}
+                    _digest_text = _gen_digest(
+                        full_name=_glance_result.get("full_name") or "",
+                        sun_sign=(_gcd2.get("sun") or {}).get("sign") or "",
+                        moon_sign=(_gcd2.get("moon") or {}).get("sign") or "",
+                        asc_sign=(_gcd2.get("ascendant") or {}).get("sign") or "",
+                        today_date=_today_date,
+                        sky=_sky,
+                        active_transits=(_gcd2.get("transits") or [])[:5],
+                        dasha=_gcd2.get("vimshottari_dasha") or {},
+                    )
+                    st.session_state._daily_digest = _digest_text
+                    st.session_state._daily_digest_key = _digest_key
+                except Exception:
+                    st.session_state._daily_digest = None
+
+            if st.session_state._daily_digest:
+                st.markdown(
+                    f'<div style="background:#0c0c24;border:1px solid #2a2a4a;border-radius:8px;'
+                    f'padding:0.7rem 0.85rem;margin-top:0.5rem;font-size:0.8rem;'
+                    f'color:#c8c0e0;line-height:1.6;font-style:italic;">'
+                    f'{st.session_state._daily_digest}</div>',
+                    unsafe_allow_html=True,
+                )
 
         st.divider()
 
