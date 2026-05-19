@@ -154,7 +154,7 @@ def compute_astro(state: "AstrologerState", _progress_cb=None) -> dict:
             compute_lunar_return,
             compute_transit_passes,
             generate_chart_svg, generate_transit_svg, generate_vedic_chart_svg,
-            generate_kundali_svg,
+            generate_kundali_svg, compute_vimshottari_dasha,
         )
 
         birth_dt = datetime.fromisoformat(state["parsed_birth_datetime"])
@@ -439,6 +439,11 @@ def compute_astro(state: "AstrologerState", _progress_cb=None) -> dict:
             )
         except Exception:
             chart["transit_passes"] = []
+
+        try:
+            chart["vimshottari_dasha"] = compute_vimshottari_dasha(chart, birth_dt)
+        except Exception:
+            chart["vimshottari_dasha"] = {}
 
         try:
             if _cache_key:

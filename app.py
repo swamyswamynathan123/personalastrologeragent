@@ -619,6 +619,153 @@ def _render_svg(svg: str) -> None:
     )
 
 
+def _render_dasha_section(dasha: dict) -> None:
+    """Render Vimshottari Dasha current period and upcoming mahadasha table."""
+    from datetime import date as _date, datetime as _datetime
+
+    cm = dasha.get("current_mahadasha") or {}
+    ca = dasha.get("current_antardasha") or {}
+    nak = dasha.get("nakshatra") or ""
+
+    st.markdown("#### 🪐 Vimshottari Dasha")
+    if nak:
+        st.caption(f"Moon nakshatra at birth: **{nak}** — ruled by **{dasha.get('birth_lord', '')}**")
+
+    _PLANET_COLOR = {
+        "Sun": "#f5a623", "Moon": "#c8e0ff", "Mars": "#e84040",
+        "Mercury": "#50e080", "Jupiter": "#f0d060", "Venus": "#f080c0",
+        "Saturn": "#8090b0", "Rahu": "#a070d0", "Ketu": "#b09060",
+    }
+
+    def _badge(lord: str) -> str:
+        color = _PLANET_COLOR.get(lord, "#aaaaaa")
+        return (
+            f'<span style="background:{color}22;color:{color};border:1px solid {color}66;'
+            f'border-radius:4px;padding:2px 8px;font-weight:600;font-size:0.85rem;">{lord}</span>'
+        )
+
+    def _progress(start_iso: str, end_iso: str) -> str:
+        try:
+            s = _date.fromisoformat(start_iso)
+            e = _date.fromisoformat(end_iso)
+            today = _date.today()
+            total = (e - s).days or 1
+            elapsed = min(max((today - s).days, 0), total)
+            pct = int(elapsed / total * 100)
+            return (
+                f'<div style="background:#1e1e40;border-radius:4px;height:6px;margin-top:4px;">'
+                f'<div style="background:#7755cc;width:{pct}%;height:6px;border-radius:4px;"></div></div>'
+                f'<div style="font-size:0.75rem;color:#8888aa;margin-top:2px;">{pct}% elapsed · ends {end_iso}</div>'
+            )
+        except Exception:
+            return ""
+
+    if cm:
+        st.markdown(
+            f'<div style="background:#1a1a35;border:1px solid #3a3a60;border-radius:8px;padding:1rem;margin-bottom:0.75rem;">'
+            f'<div style="font-size:0.8rem;color:#8888aa;text-transform:uppercase;letter-spacing:.05em;">Mahadasha</div>'
+            f'<div style="margin:4px 0;">{_badge(cm["lord"])} &nbsp; {cm["start"]} → {cm["end"]} ({cm["years"]} yrs)</div>'
+            f'{_progress(cm["start"], cm["end"])}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    if ca:
+        st.markdown(
+            f'<div style="background:#16162e;border:1px solid #2e2e50;border-radius:8px;padding:1rem;margin-bottom:0.75rem;">'
+            f'<div style="font-size:0.8rem;color:#8888aa;text-transform:uppercase;letter-spacing:.05em;">Antardasha (sub-period)</div>'
+            f'<div style="margin:4px 0;">{_badge(ca["lord"])} &nbsp; {ca["start"]} → {ca["end"]}</div>'
+            f'{_progress(ca["start"], ca["end"])}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # Mahadasha timeline table
+    periods = dasha.get("mahadashas") or []
+    if periods:
+        with st.expander("Full Mahadasha Timeline", expanded=False):
+            today_iso = _date.today().isoformat()
+            rows = []
+            for p in periods:
+                is_current = p["start"] <= today_iso <= p["end"]
+                rows.append({
+                    "Lord": ("▶ " if is_current else "") + p["lord"],
+                    "Starts": p["start"],
+                    "Ends": p["end"],
+                    "Years": p["years"],
+                })
+            import pandas as _pd
+            st.dataframe(
+                _pd.DataFrame(rows),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+
+def _render_transit_calendar(chart_data: dict, from_dt_iso: str | None) -> None:
+    """Render the 35-day transit calendar."""
+    from datetime import date as _date, datetime as _datetime
+
+    try:
+        from astro.compute import compute_transit_calendar
+        from_date = _date.today()
+        if from_dt_iso:
+            try:
+                from_date = _datetime.fromisoformat(from_dt_iso).date()
+            except Exception:
+                pass
+        events = compute_transit_calendar(chart_data, from_date, days=35)
+    except Exception as exc:
+        st.warning(f"Transit calendar unavailable: {exc}")
+        return
+
+    if not events:
+        st.info("No major transits detected in the next 35 days.")
+        return
+
+    _ASP_COLOR = {
+        "Conjunction": "#5765fb",
+        "Sextile":     "#36d100",
+        "Trine":       "#36d100",
+        "Square":      "#ff4444",
+        "Opposition":  "#ff4444",
+    }
+    _ASP_SYM = {
+        "Conjunction": "☌", "Sextile": "⚹", "Trine": "△",
+        "Square": "□", "Opposition": "☍",
+    }
+
+    # Group by date
+    from itertools import groupby as _grp
+    rows_html = ""
+    for day, day_events in _grp(events, key=lambda e: e["date"]):
+        day_events = list(day_events)
+        event_parts = []
+        for ev in day_events:
+            color = _ASP_COLOR.get(ev["aspect"], "#aaaaaa")
+            sym = _ASP_SYM.get(ev["aspect"], ev["aspect"])
+            event_parts.append(
+                f'<span style="color:{color};margin-right:0.75rem;">'
+                f'<b>{ev["transit_planet"]}</b> {sym} natal <b>{ev["natal_planet"]}</b>'
+                f'<span style="color:#666688;font-size:.8em"> ({ev["orb"]}°)</span></span>'
+            )
+        rows_html += (
+            f'<tr>'
+            f'<td style="color:#9988cc;white-space:nowrap;padding:4px 12px 4px 0;">{day}</td>'
+            f'<td style="padding:4px 0;line-height:1.8;">{" ".join(event_parts)}</td>'
+            f'</tr>'
+        )
+
+    st.markdown(
+        f'<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">'
+        f'<thead><tr>'
+        f'<th style="color:#6655aa;text-align:left;padding-bottom:6px;">Date</th>'
+        f'<th style="color:#6655aa;text-align:left;padding-bottom:6px;">Aspects</th>'
+        f'</tr></thead>'
+        f'<tbody>{rows_html}</tbody></table>',
+        unsafe_allow_html=True,
+    )
+
+
 def _birth_data_card(state: dict) -> None:
     """Render an elegant birth data summary card."""
     dob = state.get("parsed_dob") or ""
@@ -1157,7 +1304,16 @@ with natal_tab:
                         file_name=f"vedic_{_safe_name}.svg",
                         mime="image/svg+xml",
                     )
+                    # Vimshottari Dasha section inside Vedic tab
+                    _dasha = _cd1.get("vimshottari_dasha") or {}
+                    if _dasha:
+                        st.divider()
+                        _render_dasha_section(_dasha)
             st.divider()
+
+        # Transit Calendar (live, computed fresh from current date)
+        with st.expander("📅 Transit Calendar — Next 35 Days", expanded=False):
+            _render_transit_calendar(_cd1, result.get("parsed_current_datetime"))
 
         # Regenerate report button
         _regen_col, _ = st.columns([1, 3])

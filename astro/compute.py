@@ -2785,6 +2785,215 @@ def generate_kundali_svg(chart_data: dict, full_name: str = "") -> str:
         return ""
 
 
+# ---------------------------------------------------------------------------
+# Vimshottari Dasha
+# ---------------------------------------------------------------------------
+
+_DASHA_ORDER = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"]
+_DASHA_YEARS = {
+    "Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7,
+    "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17,
+}
+# 27 nakshatras — lord repeats the 9-planet sequence three times (Ketu first)
+_NAK_LORDS = [_DASHA_ORDER[i % 9] for i in range(27)]
+_NAK_NAMES = [
+    "Ashwini", "Bharani", "Krittika", "Rohini", "Mrigashira", "Ardra",
+    "Punarvasu", "Pushya", "Ashlesha", "Magha", "Purva Phalguni", "Uttara Phalguni",
+    "Hasta", "Chitra", "Swati", "Vishakha", "Anuradha", "Jyeshtha",
+    "Mula", "Purva Ashadha", "Uttara Ashadha", "Shravana", "Dhanishtha",
+    "Shatabhisha", "Purva Bhadrapada", "Uttara Bhadrapada", "Revati",
+]
+
+
+def compute_vimshottari_dasha(chart_data: dict, birth_datetime: "datetime") -> dict:
+    """Compute Vimshottari Dasha / Antardasha periods from the Moon's sidereal nakshatra.
+
+    Returns a dict with:
+    - nakshatra: name of birth nakshatra
+    - birth_lord: ruling dasha lord at birth
+    - mahadashas: list of all 9 mahadasha dicts (lord, years, start, end)
+    - current_mahadasha: the active mahadasha dict
+    - antardashas: list of 9 antardasha dicts within the current mahadasha
+    - current_antardasha: the active antardasha dict
+    """
+    from datetime import timedelta
+    try:
+        vedic = chart_data.get("vedic") or {}
+        sidereal = vedic.get("sidereal") or {}
+        moon = sidereal.get("moon")
+        if not moon or moon.get("sidereal_abs") is None:
+            return {}
+
+        moon_sid = float(moon["sidereal_abs"])
+        nak_size = 360.0 / 27  # 13.3333...°
+        nak_idx = int(moon_sid / nak_size) % 27
+        fraction_elapsed = (moon_sid % nak_size) / nak_size
+
+        start_lord = _NAK_LORDS[nak_idx]
+        start_lord_idx = _DASHA_ORDER.index(start_lord)
+        start_years = _DASHA_YEARS[start_lord]
+
+        # The current dasha at birth started fraction_elapsed * start_years years before birth
+        dasha_start = birth_datetime - timedelta(days=fraction_elapsed * start_years * 365.25)
+
+        # Build full 120-year mahadasha list
+        periods = []
+        cur = dasha_start
+        for i in range(9):
+            lord = _DASHA_ORDER[(start_lord_idx + i) % 9]
+            years = _DASHA_YEARS[lord]
+            end = cur + timedelta(days=years * 365.25)
+            periods.append({
+                "lord": lord,
+                "years": years,
+                "start": cur.date().isoformat(),
+                "end": end.date().isoformat(),
+            })
+            cur = end
+
+        import datetime as _dt
+        today_iso = _dt.date.today().isoformat()
+        current_maha = next((p for p in periods if p["start"] <= today_iso <= p["end"]), None)
+
+        # Antardashas for current mahadasha
+        antardashas: list = []
+        current_antar = None
+        if current_maha:
+            maha_lord = current_maha["lord"]
+            maha_idx = _DASHA_ORDER.index(maha_lord)
+            maha_years = _DASHA_YEARS[maha_lord]
+            from datetime import datetime as _datetime
+            ad_cur = _datetime.fromisoformat(current_maha["start"])
+            for i in range(9):
+                ad_lord = _DASHA_ORDER[(maha_idx + i) % 9]
+                ad_years = _DASHA_YEARS[ad_lord]
+                ad_days = (ad_years / 120.0) * maha_years * 365.25
+                ad_end = ad_cur + timedelta(days=ad_days)
+                antardashas.append({
+                    "lord": ad_lord,
+                    "start": ad_cur.date().isoformat(),
+                    "end": ad_end.date().isoformat(),
+                })
+                ad_cur = ad_end
+            current_antar = next(
+                (ad for ad in antardashas if ad["start"] <= today_iso <= ad["end"]), None
+            )
+
+        return {
+            "nakshatra": _NAK_NAMES[nak_idx],
+            "birth_lord": start_lord,
+            "mahadashas": periods,
+            "current_mahadasha": current_maha,
+            "antardashas": antardashas,
+            "current_antardasha": current_antar,
+        }
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Transit Calendar
+# ---------------------------------------------------------------------------
+
+_CAL_ASPECTS = [
+    ("Conjunction", 0, 2.5),
+    ("Sextile", 60, 2.0),
+    ("Square", 90, 2.0),
+    ("Trine", 120, 2.0),
+    ("Opposition", 180, 2.5),
+]
+_CAL_PLANET_SWE: dict = {}  # filled lazily below
+
+
+def _ensure_cal_swe() -> bool:
+    global _CAL_PLANET_SWE
+    if _CAL_PLANET_SWE:
+        return True
+    try:
+        import swisseph as swe
+        _CAL_PLANET_SWE = {
+            "Sun": swe.SUN, "Moon": swe.MOON, "Mercury": swe.MERCURY,
+            "Venus": swe.VENUS, "Mars": swe.MARS, "Jupiter": swe.JUPITER,
+            "Saturn": swe.SATURN,
+        }
+        return True
+    except Exception:
+        return False
+
+
+def compute_transit_calendar(chart_data: dict, from_date: "date", days: int = 35) -> list[dict]:
+    """Return upcoming exact transit aspects to natal planets for the next `days` days.
+
+    Each event dict has: date, transit_planet, natal_planet, aspect, orb.
+    Finds local-minimum-orb days (the exact aspect date) within each transit window.
+    """
+    from datetime import timedelta
+    if not _ensure_cal_swe():
+        return []
+
+    import swisseph as swe
+
+    # Natal tropical positions
+    natal: dict[str, float] = {}
+    _natal_keys = {
+        "Sun": "sun", "Moon": "moon", "Mercury": "mercury", "Venus": "venus",
+        "Mars": "mars", "Jupiter": "jupiter", "Saturn": "saturn",
+        "Uranus": "uranus", "Neptune": "neptune", "Pluto": "pluto",
+    }
+    for label, key in _natal_keys.items():
+        d = chart_data.get(key)
+        if d and d.get("abs_pos") is not None:
+            natal[label] = float(d["abs_pos"])
+    for angle_key, angle_label in [("ascendant", "ASC"), ("midheaven", "MC")]:
+        d = chart_data.get(angle_key)
+        if d and d.get("abs_pos") is not None:
+            natal[angle_label] = float(d["abs_pos"])
+
+    # Compute daily positions for transit planets (+2 boundary days for min detection)
+    scan_dates = [from_date + timedelta(days=i) for i in range(days + 2)]
+    daily: dict[str, list] = {p: [] for p in _CAL_PLANET_SWE}
+    for d in scan_dates:
+        jd = swe.julday(d.year, d.month, d.day, 12.0)
+        for planet, sw_id in _CAL_PLANET_SWE.items():
+            try:
+                res = swe.calc_ut(jd, sw_id, swe.FLG_SWIEPH)
+                daily[planet].append(res[0][0])
+            except Exception:
+                daily[planet].append(None)
+
+    events: list[dict] = []
+    for t_planet, positions in daily.items():
+        for n_label, n_pos in natal.items():
+            if n_label == t_planet:
+                continue
+            for asp_name, asp_angle, orb_thresh in _CAL_ASPECTS:
+                orbs: list = []
+                for pos in positions:
+                    if pos is None:
+                        orbs.append(None)
+                        continue
+                    diff = (pos - n_pos - asp_angle) % 360
+                    if diff > 180:
+                        diff -= 360
+                    orbs.append(abs(diff))
+
+                # Find local minima within orb — each is an "exact" date
+                for i in range(1, len(scan_dates) - 1):
+                    if any(orbs[j] is None for j in (i - 1, i, i + 1)):
+                        continue
+                    if orbs[i] <= orb_thresh and orbs[i] <= orbs[i - 1] and orbs[i] <= orbs[i + 1]:
+                        events.append({
+                            "date": scan_dates[i].isoformat(),
+                            "transit_planet": t_planet,
+                            "natal_planet": n_label,
+                            "aspect": asp_name,
+                            "orb": round(orbs[i], 2),
+                        })
+
+    events.sort(key=lambda e: e["date"])
+    return events
+
+
 def compute_fixed_star_conjunctions(chart: dict, orb: float = 1.0) -> list[dict]:
     """Return natal planets/angles conjunct significant fixed stars within `orb` degrees."""
     bodies: dict[str, float] = {}
