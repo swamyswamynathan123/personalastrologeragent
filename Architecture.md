@@ -331,7 +331,10 @@ flowchart TD
     NATAL & NOW --> FIR[Firdaria Time Lords\nmajor period · sub-period\nnatal condition of each lord\nyears remaining]:::outputNode
 
     NATAL --> SVG1[Natal Chart SVG\nKerykeionChartSVG\nwheel diagram]:::outputNode
+    NATAL --> SVG3[Kundali SVG\ngenerate_kundali_svg\nNorth Indian Lagna chart\nsidereal positions · full names]:::outputNode
     NATAL & NOW --> SVG2[Transit Overlay SVG\nKerykeionChartSVG\nnatal + current sky wheels]:::outputNode
+
+    NATAL & NOW --> TRC[Transit Calendar\nnext 35 days via pyswisseph\nexact aspect dates\nSun–Saturn vs natal points]:::outputNode
 ```
 
 ---
@@ -355,7 +358,7 @@ flowchart TD
 
     SID --> NAV[Navamsha D9\nsoul-level sign\nmarriage / dharma chart]:::outputNode
 
-    SID --> DASH[Vimshottari Dasha\nMahadasha — 6 to 20 yr period\nAntardasha — sub-period\nyears remaining for each]:::outputNode
+    SID --> DASH[Vimshottari Dasha\ncompute_vimshottari_dasha\nMahadasha · Antardasha\nprogress + full 120-yr timeline]:::outputNode
 
     SID --> YOGA[Vedic Yogas]:::outputNode
 
@@ -440,6 +443,13 @@ flowchart TD
 
     STORED --> FU[answer_followup_stream\nreport prepended as\nassistant turn\nchat history appended]:::llmNode
     FU --> CHAT[st.chat_message\nstreaming reply]:::outputNode
+
+    SKY[compute_daily_sky\nMoon · VOC · retrogrades\nclosest outer transit]:::inputNode
+    SKY --> DD[generate_daily_digest\ngpt-4o blocking\nmax_tokens=160\n2–3 sentence synthesis]:::llmNode
+    DD --> DDCACHE{_daily_digest_key\ncached by date+person?}:::cacheNode
+    DDCACHE -- hit --> DDSHOW[show cached text]:::outputNode
+    DDCACHE -- miss --> DD
+    DD --> DDSHOW
 ```
 
 ---
@@ -473,6 +483,24 @@ graph TD
     AC --> KER & SWE
     KER --> GEO
 ```
+
+---
+
+## Key Session State Keys
+
+| Key | Type | Purpose |
+|---|---|---|
+| `report_result` | dict | Final state dict with `final_report`; persists styled render |
+| `_prepared_state` | dict | Intermediate state after `prepare_graph`, before streaming |
+| `_stream_error` | str\|None | Error message if streaming fails; enables Retry button |
+| `chat_history` | list | `{"role", "content"}` dicts for natal follow-up chat |
+| `synastry_result` | dict | Synastry result dict including `"report"` |
+| `_synastry_prepared` | dict | Intermediate synastry state before streaming |
+| `synastry_chat_history` | list | Follow-up chat for synastry |
+| `_daily_sky` | dict | Output of `compute_daily_sky`; Moon, VOC, retrograde, closest transit |
+| `_daily_sky_date` | str | ISO date; invalidates `_daily_sky` at midnight |
+| `_daily_digest` | str\|None | AI-generated 2–3 sentence daily paragraph |
+| `_daily_digest_key` | str\|None | Cache key: `f"{name}\|{dob}\|{today}"` |
 
 ---
 

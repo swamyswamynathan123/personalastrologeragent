@@ -32,7 +32,7 @@ Open the sidebar and fill in the form. Fields marked `*` are required.
 
 Click **Generate My Reading ⭐**. The app will:
 1. Validate your details and show any issues inline
-2. Compute your full natal chart (~15 seconds)
+2. Compute your full natal chart (~15–25 seconds)
 3. Stream your reading live in 3 parts as the AI writes it
 
 ---
@@ -58,6 +58,66 @@ Your birth time affects a large portion of the reading — particularly your Asc
 | **Placidus** | Standard in modern Western astrology | Most people; the default |
 | **Whole Sign** | Oldest system; used in Hellenistic and Vedic traditions | Those interested in traditional or Vedic crossover readings |
 | **Koch** | Popular in German-speaking countries; emphasises the MC axis | Career-focused readings |
+
+---
+
+## Sidebar Features
+
+Once your reading is generated, the sidebar displays three panels above the form:
+
+### Chart at a Glance
+A compact summary of your three most important natal placements: Sun ☉, Moon ☽, and Ascendant ↑.
+
+### Today's Sky
+A live snapshot of the current sky personalised to your chart:
+- 🌙 **Moon** — current sign, degree, and void-of-course status
+- ⚡ **Closest transit** — the outer planet forming the tightest aspect to a natal point right now
+- **Rx** — any planets currently retrograde
+
+### Daily Digest
+An AI-written 2–3 sentence paragraph that synthesises today's sky specifically for your chart — not a generic horoscope, but a reading grounded in your natal positions, current transits, and Vedic timing period. Updated once per day; click **↺** to refresh on demand.
+
+---
+
+## Chart Wheels
+
+After your reading generates, four chart tabs appear:
+
+| Tab | What it shows |
+|---|---|
+| **Natal Chart** | Western tropical wheel with house cusps in your chosen house system |
+| **Kundali** | North Indian Lagna chart using sidereal Lahiri positions. Houses are fixed in the traditional 4×4 grid; signs and planets rotate based on your Ascendant. Full planet names shown; retrograde planets marked (R). |
+| **Transit Overlay** | Today's sky overlaid on your natal wheel — shows which houses current planets are activating |
+| **Vedic Chart** | Sidereal wheel via kerykeion |
+
+Each tab has a **Download SVG** button to save the chart image.
+
+---
+
+## Vimshottari Dasha
+
+The **Vimshottari Dasha** section appears inside the Vedic Chart tab. It is the primary timing system in Jyotish (Vedic astrology), dividing life into planetary periods totalling 120 years based on the Moon's position in a lunar mansion (nakshatra) at birth.
+
+**What it shows:**
+- Your birth **nakshatra** (lunar mansion) and its ruling planet
+- **Mahadasha** — your current major planetary period (6–20 years), with a progress bar and end date
+- **Antardasha** — the sub-period within the Mahadasha (months to a few years), with its own progress bar
+- **Full timeline** — an expandable table of all 9 mahadasha periods across the 120-year cycle, with the current one highlighted
+
+The Mahadasha lord colours the overall chapter of life; the Antardasha lord describes the specific flavour of that chapter right now.
+
+---
+
+## Transit Calendar
+
+The **📅 Transit Calendar — Next 35 Days** section appears below the chart tabs as a collapsible panel. It shows upcoming **exact aspect dates** — the precise day each transiting planet perfects an aspect to a natal position.
+
+- Transiting planets tracked: Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn
+- Natal points: all 10 planets + ASC + MC
+- Aspects: Conjunction ☌, Sextile ⚹, Trine △, Square □, Opposition ☍
+- Colour-coded by impact: **green** = harmonious (trine, sextile), **red** = challenging (square, opposition), **blue** = conjunctions
+
+This differs from the Transit Timeline tab (which shows long multi-month windows as a Gantt chart). The Transit Calendar pinpoints the exact days within the next 35 days when aspects become exact — useful for planning.
 
 ---
 
@@ -123,7 +183,7 @@ A dedicated section going deeper on your chosen life areas, identifying the most
 After your reading generates, click **💾 Save Reading**. Your chart data and report are stored locally and can be reloaded in any future session from the **📚 My Saved Charts** panel.
 
 ### Load a saved chart
-Open **📚 My Saved Charts** in the sidebar, find your chart, and click **Load**. Your previous reading reloads instantly from cache — no API call needed.
+Open **📚 My Saved Charts** in the sidebar, find your chart, and click **Load**. Your previous reading reloads instantly from cache — no API call needed. Chart wheels are regenerated automatically on load.
 
 ### Regenerate a reading
 Click **↺ Regenerate Reading** to force a fresh AI-generated report. Use this when:
@@ -133,12 +193,11 @@ Click **↺ Regenerate Reading** to force a fresh AI-generated report. Use this 
 
 ---
 
-## Transit Calendar
+## Transit Timeline Tab
 
-The **Transit Calendar** tab shows outer-planet transit activity for your chart across the current month, with:
+The **Transit Calendar** tab shows outer-planet transit activity for your chart across the current year, with:
 
 - **Transit Timeline** — a Gantt-style chart showing when each outer planet forms a major aspect to a natal point over the next 12 months. Wider bars = multi-pass (retrograde) transits. Hover a bar for exact dates.
-- **Monthly Calendar** — day-by-day transit events colour-coded by aspect type (harmonious / challenging / neutral).
 
 ---
 
@@ -189,7 +248,11 @@ After your reading generates, a chat interface appears at the bottom of the **My
 
 5. **Use the follow-up chat.** The reading is a starting point. The chart-aware chat is where you can go as deep as you want on any theme.
 
-6. **Regenerate after a major life event.** The reading is tied to the current date. Regenerating 6 months later gives you a fresh timing layer with new transits and profection house.
+6. **Check the Daily Digest each morning.** It refreshes with the current sky and gives you a personalised one-paragraph orientation for the day.
+
+7. **Use the Transit Calendar before making plans.** The 35-day exact aspect view shows you which days carry strong astrological energy — useful for timing decisions, meetings, or creative work.
+
+8. **Regenerate after a major life event.** The reading is tied to the current date. Regenerating 6 months later gives you a fresh timing layer with new transits and profection house.
 
 ---
 
@@ -207,8 +270,14 @@ The sky is divided into 12 segments (houses), each governing a life area. Differ
 **What is a natal aspect?**
 An aspect is an angular relationship between two planets (e.g., 90° = square, 120° = trine, 180° = opposition). Aspects describe how two planetary energies interact in your personality and life experience.
 
+**What is the Kundali chart?**
+The Kundali is a North Indian style Vedic chart. Unlike the circular Western wheel, it uses a fixed 4×4 diamond grid where house positions are always in the same cells. The first house (Lagna) is in the top-centre cell; signs rotate clockwise based on your sidereal Ascendant. Planets are shown by their full names using sidereal (Lahiri) positions.
+
+**What is Vimshottari Dasha?**
+The primary timing system in Jyotish (Vedic astrology). Based on the Moon's position in a nakshatra (lunar mansion) at birth, it divides life into nine planetary periods totalling 120 years. Each planet rules a period of 6–20 years (Mahadasha). Within each Mahadasha, nine sub-periods (Antardasha) subdivide the time further. The current Mahadasha and Antardasha lords colour the themes and opportunities of this chapter of your life.
+
 **Why does the reading sometimes take 30+ seconds?**
-The app first computes your full natal chart including transits, progressions, solar arc, Vedic overlay, primary directions, and 12+ other layers (~15 seconds). It then generates a 9-section reading across 3 separate AI calls, streamed live. You will see the first sections appear while later sections are still being written.
+The app first computes your full natal chart including transits, progressions, solar arc, Vedic overlay, Vimshottari Dasha, primary directions, and 12+ other layers (~15–25 seconds). It then generates a 9-section reading across 3 separate AI calls, streamed live. You will see the first sections appear while later sections are still being written.
 
 **Can I use this without knowing astrology?**
 Yes. The reading is written in plain language without assuming prior astrological knowledge. Use the tooltips (ⓘ) on the form for guidance on each field. The follow-up chat is also useful for clarifying any terms or concepts in the reading.
@@ -227,9 +296,11 @@ Yes. The reading is written in plain language without assuming prior astrologica
 | **Primary Direction** | The oldest Western timing method. Marks biographical milestones with high precision. |
 | **Profection** | An annual timing technique that activates one house (life area) per year of life. |
 | **Firdaria** | A Persian time-lord system dividing life into planetary periods of varying lengths. |
-| **Vimshottari Dasha** | The primary Vedic timing system dividing life into planetary periods totalling 120 years. |
-| **Nakshatra** | One of 27 lunar mansions in Vedic astrology. The Moon's nakshatra is the most important Vedic placement. |
+| **Vimshottari Dasha** | The primary Vedic timing system dividing life into planetary periods totalling 120 years, based on the Moon's nakshatra at birth. |
+| **Nakshatra** | One of 27 lunar mansions in Vedic astrology, each spanning 13°20'. The Moon's nakshatra determines the starting Dasha lord at birth. |
 | **Navamsha (D9)** | A Vedic divisional chart showing soul-level qualities, dharma, and marriage themes. |
+| **Kundali** | North Indian style Vedic chart using a fixed 4×4 diamond grid. Signs and planets are placed according to sidereal positions. |
+| **Antardasha** | A sub-period within a Vimshottari Mahadasha; there are 9 antardashas within each major period. |
 | **Synastry** | Comparison of two natal charts to assess relationship dynamics. |
 | **Composite Chart** | A chart created from the midpoints of two people's planets, representing the relationship as its own entity. |
 | **Dignity** | A planet's strength based on its sign: domicile (strongest) → exaltation → neutral → detriment → fall (most challenged). |
@@ -238,3 +309,4 @@ Yes. The reading is written in plain language without assuming prior astrologica
 | **Aspect pattern** | A configuration of 3+ planets forming a geometric shape (Grand Trine, T-Square, Grand Cross, Yod). Represents structural life themes. |
 | **Part of Fortune** | An Arabic Part (calculated point) showing the area of natural ease and abundance. |
 | **Chiron** | A minor planet associated with a core wound and the healing gift that emerges from it. |
+| **Void-of-Course (VOC)** | The Moon is void-of-course when it makes no more major aspects before leaving its current sign. Traditionally a time for reflection rather than new initiatives. |

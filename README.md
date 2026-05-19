@@ -9,12 +9,35 @@ A full-featured astrological reading app powered by LangGraph, OpenAI GPT-4o, an
 - Computes a comprehensive natal chart via kerykeion + swisseph
 - Streams the GPT-4o report live in 3 focused parts (identity & soul → cosmic timing → advanced windows & Vedic)
 - Follow-up chat retains full chart context across multiple questions
-- Export report as Markdown or HTML (with embedded SVG chart wheel)
+- Export report as Markdown, HTML (with embedded SVG chart wheel), or PDF
 - Report is cached in SQLite so reloads are instant
+
+**Sidebar — Daily Digest**
+- **Chart at a Glance** — Sun, Moon, ASC signs shown above the form once a reading exists
+- **Today's Sky** — live Moon sign/degree, void-of-course status, closest outer-planet transit, retrograde planets
+- **Daily Digest** — AI-generated 2–3 sentence personalised paragraph synthesising the day's sky for this specific chart; cached daily, refreshable on demand
+
+**Chart Wheels (4 tabs)**
+| Tab | Description |
+|---|---|
+| Natal Chart | Western tropical wheel with house cusps (Placidus / Whole Sign / Koch) |
+| Kundali | North Indian Lagna chart using sidereal Lahiri positions; full planet names, retrograde marked (R) |
+| Transit Overlay | Current sky overlaid on the natal wheel |
+| Vedic Chart | Sidereal wheel via kerykeion |
+
+**Vimshottari Dasha** (inside Vedic chart tab)
+- Current Mahadasha and Antardasha with progress bars and end dates
+- Birth Moon nakshatra identification
+- Full 120-year mahadasha timeline table
+
+**Transit Calendar** (collapsible, next 35 days)
+- Exact aspect dates between transiting planets (Sun–Saturn) and natal positions
+- Colour-coded: green = trine/sextile, red = square/opposition, blue = conjunction
+- Computed live from today's date — always current
 
 **Transit Timeline**
 - Gantt-style chart showing when each outer planet forms a major aspect to a natal point over the next 12 months
-- Day-by-day transit calendar with colour-coded aspect types (harmonious / challenging / neutral)
+- Hover a bar for exact dates and orb
 
 **Forecasts**
 - Four AI-generated forward-looking reports: Weekly (7 days), Monthly (30 days), Yearly (12 months), Overall (2–3 years)
@@ -41,7 +64,8 @@ A full-featured astrological reading app powered by LangGraph, OpenAI GPT-4o, an
 | Solar return | Annual return chart with angular planets and highlighted houses |
 | Annual profection | Age-based house activation and lord of the year |
 | Firdaria | Persian time lords — major and sub-period |
-| Vedic overlay | Sidereal positions (Lahiri), nakshatra, Vimshottari dasha, yogas |
+| Vimshottari Dasha | Moon nakshatra → Mahadasha / Antardasha with progress bars and full timeline |
+| Vedic overlay | Sidereal positions (Lahiri), nakshatra, yogas, navamsha |
 | Elemental/modal balance | Fire/Earth/Air/Water, Cardinal/Fixed/Mutable counts |
 | Planetary sect | Day/night chart, in-sect vs. out-of-sect planets |
 | Lunar phase | Natal Moon phase archetype |
@@ -127,15 +151,17 @@ pytest tests/ -v -m integration
 ├── astro/
 │   └── compute.py      # kerykeion + swisseph chart computation (all techniques)
 ├── llm/
-│   └── report.py       # 3-call streaming pipeline, prompt builders, synastry, follow-up
+│   └── report.py       # 3-call streaming pipeline, prompt builders, synastry, follow-up, daily digest
+├── export/
+│   └── pdf.py          # PDF export with embedded SVG wheels via reportlab + svglib
 ├── tests/
 │   ├── test_validators.py
 │   ├── test_nodes.py
 │   ├── test_graph.py
 │   └── test_pipeline.py  # LLM streaming pipeline tests
-├── cache/              # SQLite geocoding cache (kerykeion, auto-created)
+├── cache/              # SQLite report cache + kerykeion geocoding cache (auto-created)
 ├── storage/            # Saved charts and readings (auto-created)
-├── app.py              # Streamlit UI (sidebar form, natal, transit calendar, synastry, forecasts tabs)
+├── app.py              # Streamlit UI — sidebar, natal, synastry, forecasts, transit calendar tabs
 ├── run.bat             # Windows launcher — auto-creates venv and installs deps on first run
 ├── USERS.md            # End-user documentation
 └── requirements.txt
@@ -151,6 +177,7 @@ pytest tests/ -v -m integration
 | LLM | OpenAI GPT-4o |
 | UI | Streamlit |
 | Transit timeline chart | Plotly |
+| PDF export | reportlab + svglib |
 | Timezone handling | pytz |
 | Markdown → HTML export | markdown |
 
