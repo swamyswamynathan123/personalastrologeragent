@@ -1006,12 +1006,15 @@ with natal_tab:
         # Chart SVGs
         _cd0 = prepared.get("chart_data") or {}
         chart_svg = _cd0.get("chart_svg") or ""
+        kundali_svg = _cd0.get("kundali_svg") or ""
         vedic_svg = _cd0.get("vedic_svg") or ""
         transit_svg = _cd0.get("transit_svg") or ""
-        if chart_svg or vedic_svg or transit_svg:
+        if chart_svg or kundali_svg or vedic_svg or transit_svg:
             tab_labels = []
             if chart_svg:
                 tab_labels.append("Natal Chart")
+            if kundali_svg:
+                tab_labels.append("Kundali")
             if transit_svg:
                 tab_labels.append("Transit Overlay")
             if vedic_svg:
@@ -1021,6 +1024,10 @@ with natal_tab:
             if chart_svg:
                 with chart_tabs[tab_idx]:
                     _render_svg(chart_svg)
+                tab_idx += 1
+            if kundali_svg:
+                with chart_tabs[tab_idx]:
+                    _render_svg(kundali_svg)
                 tab_idx += 1
             if transit_svg:
                 with chart_tabs[tab_idx]:
@@ -1056,13 +1063,13 @@ with natal_tab:
         # Chart wheels — regenerate SVGs if missing (e.g. loaded from saved charts where SVGs are stripped)
         _cd1 = result.get("chart_data") or {}
         _needs_regen = (
-            (not _cd1.get("chart_svg") or not _cd1.get("vedic_svg"))
+            (not _cd1.get("chart_svg") or not _cd1.get("vedic_svg") or not _cd1.get("kundali_svg"))
             and _cd1.get("_natal_lat") is not None
             and result.get("parsed_birth_datetime")
         )
         if _needs_regen:
             try:
-                from astro.compute import generate_chart_svg as _gen_svg, generate_vedic_chart_svg as _gen_vedic_svg
+                from astro.compute import generate_chart_svg as _gen_svg, generate_vedic_chart_svg as _gen_vedic_svg, generate_kundali_svg as _gen_kundali_svg
                 _bdt = datetime.fromisoformat(result["parsed_birth_datetime"])
                 _lat = _cd1["_natal_lat"]
                 _lng = _cd1["_natal_lng"]
@@ -1089,18 +1096,26 @@ with natal_tab:
                     )
                     if _vsvg:
                         _updates["vedic_svg"] = _vsvg
+                if not _cd1.get("kundali_svg"):
+                    _ksvg = _gen_kundali_svg({**_cd1, **_updates}, full_name=_name)
+                    if _ksvg:
+                        _updates["kundali_svg"] = _ksvg
                 if _updates:
                     _cd1 = {**_cd1, **_updates}
                     st.session_state.report_result = {**result, "chart_data": _cd1}
             except Exception:
                 pass
         chart_svg = _cd1.get("chart_svg") or ""
+        kundali_svg = _cd1.get("kundali_svg") or ""
         vedic_svg = _cd1.get("vedic_svg") or ""
         transit_svg = _cd1.get("transit_svg") or ""
-        if chart_svg or vedic_svg or transit_svg:
+        _safe_name = result["full_name"].replace(" ", "_")
+        if chart_svg or kundali_svg or vedic_svg or transit_svg:
             tab_labels = []
             if chart_svg:
                 tab_labels.append("Natal Chart")
+            if kundali_svg:
+                tab_labels.append("Kundali")
             if transit_svg:
                 tab_labels.append("Transit Overlay")
             if vedic_svg:
@@ -1112,7 +1127,16 @@ with natal_tab:
                     _render_svg(chart_svg)
                     st.download_button(
                         "Download Natal SVG", data=chart_svg,
-                        file_name=f"natal_{result['full_name'].replace(' ', '_')}.svg",
+                        file_name=f"natal_{_safe_name}.svg",
+                        mime="image/svg+xml",
+                    )
+                tab_idx += 1
+            if kundali_svg:
+                with chart_tabs[tab_idx]:
+                    _render_svg(kundali_svg)
+                    st.download_button(
+                        "Download Kundali SVG", data=kundali_svg,
+                        file_name=f"kundali_{_safe_name}.svg",
                         mime="image/svg+xml",
                     )
                 tab_idx += 1
@@ -1121,7 +1145,7 @@ with natal_tab:
                     _render_svg(transit_svg)
                     st.download_button(
                         "Download Transit SVG", data=transit_svg,
-                        file_name=f"transit_{result['full_name'].replace(' ', '_')}.svg",
+                        file_name=f"transit_{_safe_name}.svg",
                         mime="image/svg+xml",
                     )
                 tab_idx += 1
@@ -1130,7 +1154,7 @@ with natal_tab:
                     _render_svg(vedic_svg)
                     st.download_button(
                         "Download Vedic SVG", data=vedic_svg,
-                        file_name=f"vedic_{result['full_name'].replace(' ', '_')}.svg",
+                        file_name=f"vedic_{_safe_name}.svg",
                         mime="image/svg+xml",
                     )
             st.divider()

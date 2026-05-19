@@ -2625,6 +2625,166 @@ def generate_vedic_chart_svg(
         return ""
 
 
+def generate_kundali_svg(chart_data: dict, full_name: str = "") -> str:
+    """Generate a North Indian style Kundali (Lagna) chart SVG.
+
+    Uses sidereal Lahiri positions from chart_data['vedic']['sidereal'].
+    House 1 is fixed at top-left of the second cell; signs rotate clockwise
+    from the Lagna sign.  Planets are labelled with traditional Sanskrit
+    abbreviations (Su Mo Me Ve Ma Ju Sa Rā Ke).
+    """
+    try:
+        vedic = chart_data.get("vedic") or {}
+        sidereal = vedic.get("sidereal") or {}
+
+        asc = sidereal.get("ascendant")
+        if not asc or asc.get("sidereal_abs") is None:
+            return ""
+
+        lagna_idx = int(asc["sidereal_abs"] / 30) % 12  # 0=Aries … 11=Pisces
+
+        # North Indian 4×4 grid: house number → (row, col)
+        _POS: dict[int, tuple[int, int]] = {
+            12: (0, 0),  1: (0, 1),  2: (0, 2),  3: (0, 3),
+            11: (1, 0),                            4: (1, 3),
+            10: (2, 0),                            5: (2, 3),
+             9: (3, 0),  8: (3, 1),  7: (3, 2),  6: (3, 3),
+        }
+        _CENTER = {(1, 1), (1, 2), (2, 1), (2, 2)}
+
+        # Full planet names
+        _NAMES: dict[str, str] = {
+            "sun": "Sun", "moon": "Moon", "mercury": "Mercury", "venus": "Venus",
+            "mars": "Mars", "jupiter": "Jupiter", "saturn": "Saturn", "north_node": "Rahu",
+        }
+        _NODES = {"Rahu", "Ketu"}
+
+        # Group planets by sidereal sign index
+        sign_planets: dict[int, list[tuple[str, bool]]] = {i: [] for i in range(12)}
+        for body, name in _NAMES.items():
+            data = sidereal.get(body)
+            if data and data.get("sidereal_abs") is not None:
+                sidx = int(data["sidereal_abs"] / 30) % 12
+                is_retro = bool((chart_data.get(body) or {}).get("retrograde", False))
+                sign_planets[sidx].append((name, is_retro))
+
+        # Ketu is always opposite Rahu
+        rahu = sidereal.get("north_node")
+        if rahu and rahu.get("sidereal_abs") is not None:
+            ketu_idx = (int(rahu["sidereal_abs"] / 30) + 6) % 12
+            sign_planets[ketu_idx].append(("Ketu", False))
+
+        _SIGN_SHORT = ["Ar", "Ta", "Ge", "Ca", "Le", "Vi",
+                       "Li", "Sc", "Sg", "Cp", "Aq", "Pi"]
+
+        SIZE   = 560
+        CELL   = SIZE // 4   # 140 px
+        TITLE  = 34
+        TOTAL  = TITLE + SIZE
+
+        BG      = "#1a1a2e"
+        CELL_BG = "#16162a"
+        L1_BG   = "#241540"
+        CTR_BG  = "#0f0f1a"
+        BORDER  = "#3a3a60"
+        C_SIGN  = "#8866cc"
+        C_HOUSE = "#6655aa"
+        C_PLT   = "#e8e0d0"
+        C_RETRO = "#f09060"
+        C_NODE  = "#e8b060"
+        C_L1    = "#c8a8f8"
+        C_TITLE = "#d4bfff"
+
+        parts: list[str] = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" '
+            f'viewBox="0 0 {SIZE} {TOTAL}" '
+            f'style="font-family:Georgia,serif;background:{BG};">',
+            f'<rect width="{SIZE}" height="{TOTAL}" fill="{BG}"/>',
+            f'<text x="{SIZE // 2}" y="22" text-anchor="middle" '
+            f'fill="{C_TITLE}" font-size="13" font-style="italic">'
+            f'{full_name} — Kundali (North Indian · Lahiri)</text>',
+        ]
+
+        for house_num, (row, col) in _POS.items():
+            x = col * CELL
+            y = TITLE + row * CELL
+            is_lagna = (house_num == 1)
+
+            sign_idx = (lagna_idx + house_num - 1) % 12
+            planets = sign_planets[sign_idx]
+
+            parts.append(
+                f'<rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" '
+                f'fill="{L1_BG if is_lagna else CELL_BG}" '
+                f'stroke="{BORDER}" stroke-width="1.5"/>'
+            )
+            # House number (top-left, small)
+            parts.append(
+                f'<text x="{x + 5}" y="{y + 14}" '
+                f'fill="{C_HOUSE}" font-size="11">{house_num}</text>'
+            )
+            # Sign abbreviation (top-right)
+            parts.append(
+                f'<text x="{x + CELL - 5}" y="{y + 14}" text-anchor="end" '
+                f'fill="{C_SIGN}" font-size="11">{_SIGN_SHORT[sign_idx]}</text>'
+            )
+            # Lagna badge
+            content_y = y + (44 if is_lagna else 30)
+            if is_lagna:
+                parts.append(
+                    f'<text x="{x + CELL // 2}" y="{y + 29}" '
+                    f'text-anchor="middle" fill="{C_L1}" '
+                    f'font-size="10" font-weight="bold">Lagna</text>'
+                )
+            # Planets
+            for pi, (name, is_retro) in enumerate(planets[:5]):
+                py = content_y + pi * 15
+                if py > y + CELL - 5:
+                    break
+                label = f"{name} (R)" if is_retro else name
+                color = C_NODE if name in _NODES else (C_RETRO if is_retro else C_PLT)
+                parts.append(
+                    f'<text x="{x + CELL // 2}" y="{py}" '
+                    f'text-anchor="middle" fill="{color}" font-size="10">{label}</text>'
+                )
+
+        # Centre 2×2 area
+        for (row, col) in _CENTER:
+            x, y = col * CELL, TITLE + row * CELL
+            parts.append(
+                f'<rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" '
+                f'fill="{CTR_BG}" stroke="{BORDER}" stroke-width="1.5"/>'
+            )
+
+        # Traditional diagonal cross lines
+        x1, y1 = 1 * CELL, TITLE + 1 * CELL
+        x2, y2 = 3 * CELL, TITLE + 3 * CELL
+        parts.append(
+            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+            f'stroke="{BORDER}" stroke-width="1" stroke-dasharray="4,4"/>'
+        )
+        parts.append(
+            f'<line x1="{x2}" y1="{y1}" x2="{x1}" y2="{y2}" '
+            f'stroke="{BORDER}" stroke-width="1" stroke-dasharray="4,4"/>'
+        )
+
+        cm, cmy = SIZE // 2, TITLE + SIZE // 2
+        lagna_sign = _SIGNS[lagna_idx]
+        parts.extend([
+            f'<text x="{cm}" y="{cmy - 10}" text-anchor="middle" '
+            f'fill="{C_HOUSE}" font-size="10" font-style="italic">North Indian</text>',
+            f'<text x="{cm}" y="{cmy + 6}" text-anchor="middle" '
+            f'fill="{C_SIGN}" font-size="11">Lagna: {lagna_sign}</text>',
+            f'<text x="{cm}" y="{cmy + 20}" text-anchor="middle" '
+            f'fill="{C_HOUSE}" font-size="9" font-style="italic">Lahiri Ayanamsa</text>',
+            '</svg>',
+        ])
+
+        return "\n".join(parts)
+    except Exception:
+        return ""
+
+
 def compute_fixed_star_conjunctions(chart: dict, orb: float = 1.0) -> list[dict]:
     """Return natal planets/angles conjunct significant fixed stars within `orb` degrees."""
     bodies: dict[str, float] = {}

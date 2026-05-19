@@ -154,6 +154,7 @@ def compute_astro(state: "AstrologerState", _progress_cb=None) -> dict:
             compute_lunar_return,
             compute_transit_passes,
             generate_chart_svg, generate_transit_svg, generate_vedic_chart_svg,
+            generate_kundali_svg,
         )
 
         birth_dt = datetime.fromisoformat(state["parsed_birth_datetime"])
@@ -373,6 +374,11 @@ def compute_astro(state: "AstrologerState", _progress_cb=None) -> dict:
                 chart["vedic_svg"] = ""
         except Exception:
             chart["vedic_svg"] = ""
+
+        try:
+            chart["kundali_svg"] = generate_kundali_svg(chart, full_name=state["full_name"])
+        except Exception:
+            chart["kundali_svg"] = ""
 
         try:
             current_dt = datetime.fromisoformat(state["parsed_current_datetime"])
